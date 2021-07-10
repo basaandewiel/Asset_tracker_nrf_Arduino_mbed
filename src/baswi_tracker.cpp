@@ -1,8 +1,17 @@
+//TODO@@@
+//    watchdog timer toevoegen
+//    code optimaliseren voor power consumption (idle timer, LIS2device?)
+//    code netjes maken (ook LIS2 code)
+//    alles in github en clonen vanaf hobby laptop
+
 #include <Arduino.h>
 #define DEBUG_STREAM SerialUSB
 #define MODEM_STREAM Serial2 //see pins_arduino.h
 #define GPS_POLL_INTERVAL 1000 //milliseconds 
 #define GPS_TIMEOUT 60000 //milliseonds
+
+#define DESTINATION_IP "149.210.176.132"
+#define DESTINATION_PORT "12005"
 
 unsigned long baud = 115200;  //start at 115200
 
@@ -198,9 +207,9 @@ void TurnOnSodaqNRFmodem()
   strcpy(commentstring, "Read IMSI");
   WriteStringToModem(modemstring, commentstring);
 
-  strcpy(modemstring, "AT+CCID\r\n"); //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
-  strcpy(commentstring, "Read ICCID");
-  WriteStringToModem(modemstring, commentstring);
+//  strcpy(modemstring, "AT+CCID\r\n"); //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
+//  strcpy(commentstring, "Read ICCID");
+//  WriteStringToModem(modemstring, commentstring);
 
   strcpy(modemstring, "AT+CGDCONT=0,\"IP\",\"data.mono\"\r\n"); 
   strcpy(commentstring, "set APN to Monogoto");
@@ -225,7 +234,7 @@ bool WaitForGPSfix()
   printlnV("Enter function");
 
   strcpy(modemstring, "AT%XMAGPIO=1,0,0,1,1,1565,1586\r\n");
-  strcpy(commentstring, "Turn on amplifier for GPS?");
+  strcpy(commentstring, "Turn on amplifier for GPS");
   WriteStringToModem(modemstring, commentstring);
 
   strcpy(modemstring, "at#xgps=1,31\r\n");
@@ -320,7 +329,13 @@ bool SendGPScoords()
  
   //send longitude and latitude
   //strcpy(modemstring, "AT#XSENDTO=\"149.210.176.132\",12005,1,\"Test UDP 1,2,3\"\r\n"); 
-  strcpy(modemstring, "AT#XSENDTO=\"149.210.176.132\",12005,1,"); 
+  //strcpy(modemstring, "AT#XSENDTO=\"149.210.176.132\",12005,1,");
+  strcpy(modemstring, "AT#XSENDTO=\""); 
+  strcat(modemstring, DESTINATION_IP); //%%%
+  strcat(modemstring, "\","); 
+  strcat(modemstring, DESTINATION_PORT); 
+  strcat(modemstring, ",1,"); 
+
   strcat(modemstring, "\""); //append \"
   strcat(modemstring, longitude); //append longitude
   strcat(modemstring, ", "); 
@@ -329,11 +344,16 @@ bool SendGPScoords()
   strcpy(commentstring, "Send <url>,<port>,<datatype:1=plain text>,<data>");
   WriteStringToModem(modemstring, commentstring);
 
-  strcpy(modemstring, "at#xsocketopt=1,20,3\r\n");
+  strcpy(modemstring, "at#xsocketopt=1,20,3\r\n"); //only necessary for testing when UDP echo is configured on server
   strcpy(commentstring, "Set receive socket timeout to 3 sec");
   WriteStringToModem(modemstring, commentstring);
 
-  strcpy(modemstring, "AT#XRECVFROM=\"149.210.176.132\",12005\r\n"); 
+//  strcpy(modemstring, "AT#XRECVFROM=\"149.210.176.132\",12005\r\n"); //only necessary for testing when UDP echo is configured on server @@@IP define
+  strcpy(modemstring, "AT#XRECVFROM=\""); //only necessary for testing when UDP echo is configured on server @@@IP define
+  strcat(modemstring, DESTINATION_IP); 
+  strcat(modemstring, "\","); 
+  strcat(modemstring, DESTINATION_PORT); 
+  strcat(modemstring, "\r\n"); 
   strcpy(commentstring, "Receive <url>,<port>");
   WriteStringToModem(modemstring, commentstring);
 
@@ -424,6 +444,8 @@ void setup()
     ; // wait for serial port to connect. Needed for native USB
   }
   printlnA("***START NRF TRACKER***");
+  printlnA(DESTINATION_IP);
+  printlnA(DESTINATION_PORT);
 }
 
 
