@@ -4,6 +4,6 @@ class Watchdog
   private:
 
   public:
-    void init();
+    void init(uint32_t watchdogtimeout);
     void reload();
 };
