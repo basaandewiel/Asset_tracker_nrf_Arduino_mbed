@@ -2,6 +2,9 @@
 //    watchdog timer toevoegen
 //    code optimaliseren voor power consumption (idle timer, LIS2device?)
 //    code netjes maken (ook LIS2 code)
+//    coding guidelines: defines char declarations
+//    include guards
+//    board files netjes maken (nu NRF board file over Arduino heen gecopieerd)
 //    alles in github en clonen vanaf hobby laptop
 
 #include <Arduino.h>
@@ -12,6 +15,7 @@
 
 #define DESTINATION_IP "149.210.176.132"
 #define DESTINATION_PORT "12005"
+#define WATCHDOGTIMEOUT  819000 //(25 seconds * 32768)+1
 
 unsigned long baud = 115200;  //start at 115200
 
@@ -46,6 +50,7 @@ int c = 20;
 #include "SerialDebug.h" // Download SerialDebug library: https://github.com/JoaoLopesF/SerialDebug
 #include "mbed.h"
 #include <rtos.h>
+#include "watchdog.h"
 
 //#define Serial SerialUSB
 #include <Wire.h>
@@ -174,7 +179,7 @@ void WriteStringToModem (char *Pmodemstring, char * Pcommentstring)
   printD(Pmodemstring); //without ln, because modem string already contains CR LF
   MODEM_STREAM.write(Pmodemstring); //turn on NB-IOT, LTE-M and GPS
   
-  rtos::ThisThread::sleep_for(2000); //do not write commands too fast to modem
+  rtos::ThisThread::sleep_for(500); //do not write commands too fast to modem
 }
 
 void TurnOnSodaqNRFmodem()
@@ -328,8 +333,7 @@ bool SendGPScoords()
   WriteStringToModem(modemstring, commentstring);
  
   //send longitude and latitude
-  //strcpy(modemstring, "AT#XSENDTO=\"149.210.176.132\",12005,1,\"Test UDP 1,2,3\"\r\n"); 
-  //strcpy(modemstring, "AT#XSENDTO=\"149.210.176.132\",12005,1,");
+  //create string "AT#XSENDTO="IP-number",<port number>,1,"<Longitude>, <Latitude>"\r\n"); 
   strcpy(modemstring, "AT#XSENDTO=\""); 
   strcat(modemstring, DESTINATION_IP); //%%%
   strcat(modemstring, "\","); 
@@ -348,8 +352,10 @@ bool SendGPScoords()
   strcpy(commentstring, "Set receive socket timeout to 3 sec");
   WriteStringToModem(modemstring, commentstring);
 
-//  strcpy(modemstring, "AT#XRECVFROM=\"149.210.176.132\",12005\r\n"); //only necessary for testing when UDP echo is configured on server @@@IP define
-  strcpy(modemstring, "AT#XRECVFROM=\""); //only necessary for testing when UDP echo is configured on server @@@IP define
+ 
+  //only necessary for testing when UDP echo is configured on server
+  //create string "AT#XRECVFROM="IP-number",<port number>\r\n"
+  strcpy(modemstring, "AT#XRECVFROM=\""); //only necessary for testing when UDP echo is configured on server
   strcat(modemstring, DESTINATION_IP); 
   strcat(modemstring, "\","); 
   strcat(modemstring, DESTINATION_PORT); 
@@ -357,15 +363,12 @@ bool SendGPScoords()
   strcpy(commentstring, "Receive <url>,<port>");
   WriteStringToModem(modemstring, commentstring);
 
-  //strcpy(modemstring, "AT#XSOCKET=0\r\n"); 
-  //strcpy(commentstring, "Close the socket");
-  //WriteStringToModem(modemstring, commentstring);
-
-  //@@@code to check success or failure, and do fall back 
+  strcpy(modemstring, "AT#XSOCKET=0\r\n"); 
+  strcpy(commentstring, "Close the socket");
+  WriteStringToModem(modemstring, commentstring);
 
   printlnV("Exit function");
   return true;
-
 }
 
 
@@ -406,15 +409,18 @@ void idle()
     }
 }
 
+Watchdog watchdog; // defining an object of type Cellphone
 
 
 void setup()
 {
-    rtos::Thread *modem_poll_thread = new rtos::Thread(osPriorityNormal, MODEMPOLL_THREAD_STACK, nullptr, "modem_poll_thread");
-    modem_poll_thread->start(T_getModemReaction);
+  watchdog.init(WATCHDOGTIMEOUT); 
 
-    rtos::Thread *idle_thread = new rtos::Thread(osPriorityNormal, IDLE_THREAD_STACK, nullptr, "idle_thread");
-    idle_thread->start(idle);
+  rtos::Thread *modem_poll_thread = new rtos::Thread(osPriorityNormal, MODEMPOLL_THREAD_STACK, nullptr, "modem_poll_thread");
+  modem_poll_thread->start(T_getModemReaction);
+
+  rtos::Thread *idle_thread = new rtos::Thread(osPriorityNormal, IDLE_THREAD_STACK, nullptr, "idle_thread");
+  idle_thread->start(idle);
 
   // Start communication
   DEBUG_STREAM.begin(baud);
@@ -444,8 +450,8 @@ void setup()
     ; // wait for serial port to connect. Needed for native USB
   }
   printlnA("***START NRF TRACKER***");
-  printlnA(DESTINATION_IP);
-  printlnA(DESTINATION_PORT);
+  printlnA(" ");
+  printlnA(" ");
 }
 
 
@@ -460,6 +466,7 @@ void loop()
   // Only if not DEBUG_DISABLED
 
   //@Dane: how can I optimize this loop for power consumption? I have now an idle timer running in a separate mbed thread, and this loop loops contineously
+  watchdog.reload();
 
   debugHandle(); 
   if (LIS_intr1_recvd == true) {
