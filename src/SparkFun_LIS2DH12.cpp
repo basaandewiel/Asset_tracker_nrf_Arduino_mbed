@@ -107,7 +107,7 @@ bool SPARKFUN_LIS2DH12::begin(uint8_t i2cAddress, TwoWire &wirePort)
   uint8_t ret;
   //brief  Reference value for interrupt generation.[set]
   //          LSB = ~16@2g / ~31@4g / ~63@8g / ~127@16g
-  uint8_t ref_int_gen = 16;
+//  uint8_t ref_int_gen = 16;
 //  ret32 = lis2dh12_filter_reference_set(&dev_ctx, &ref_int_gen); //reference mode geeft differences; https://manualzz.com/doc/10628599/lis3dh-app-note
 //  if (ret32 != 0) printlnA("ERROR filter reference");
 
