@@ -1,6 +1,5 @@
 //TODO@@@
-//    haal interrupt timer er wer uit
-//    code optimaliseren voor power consumption (idle timer, LIS2device?)
+//    code optimaliseren voor power consumption (LIS2device?)
 //    code netjes maken (ook LIS2 code)
 //    coding guidelines: defines char declarations
 //    include guards
@@ -25,12 +24,7 @@ char modem_reaction[64]; //holds last modem reaction string
 char longitude[32]; //holds longitude of last GPS fix
 char latitude[32]; //holds latitude of last GPS fix
 
-//Mbed OS can help you to understand the sleep patterns of your device, 
-//specifically who is holding a sleep locks preventing your board to enter the deep sleep. To enable the tracing
-#define MBED_SLEEP_TRACING_ENABLED
-
 // SerialDebug Library
-
 // Disable all debug ? Good to release builds (production)
 // as nothing of SerialDebug is compiled, zero overhead :-)
 // For it just uncomment the DEBUG_DISABLED
@@ -80,8 +74,6 @@ rtos::Semaphore sem(1);
 #define TIMER_INTERRUPT_DEBUG         0
 #define _TIMERINTERRUPT_LOGLEVEL_     0
 
-#include "NRF52_MBED_TimerInterrupt.h"
-
 #define LED_BLUE_PIN            (24u)
 
 #define TIMER0_INTERVAL_MS        30000 //30 sec
@@ -91,9 +83,6 @@ volatile bool timerExpired = false;
 
 // Depending on the board, you can select NRF52 Hardware Timer from NRF_TIMER_1,NRF_TIMER_3,NRF_TIMER_4 (1,3 and 4)
 // If you select the already-used NRF_TIMER_0 or NRF_TIMER_2, it'll be auto modified to use NRF_TIMER_1
-
-// Init NRF52 timer NRF_TIMER3
-NRF52_MBED_Timer ITimer0(NRF_TIMER_3);
 
 // to be used if you want to print from ISR context
 void PrintToBuffer(char* val)
@@ -471,18 +460,6 @@ void setup()
   rtos::Thread *idle_thread = new rtos::Thread(osPriorityNormal, IDLE_THREAD_STACK, nullptr, "idle_thread");
   idle_thread->start(idle); 
 
-/*  // Interval in microsecs //baswi afeer some time the whole system crashes; NOT due to the watchdog
-    //so just use idle_thread with a wait; mbed puts automatically CPU in sleep
-
-  if (ITimer0.attachInterruptInterval(TIMER0_INTERVAL_MS * 1000, TimerHandler0))
-  {
-    preMillisTimer0 = millis();
-    Serial.print(F("Starting ITimer0 OK, millis() = ")); Serial.println(preMillisTimer0);
-  }
-  else {
-    Serial.println(F("Can't set ITimer0. Select another freq. or timer"));
-  }*/
-
   InitSodaqNRF();
 
   //baswi: printf CANNOT be used inside ISR context
@@ -531,7 +508,6 @@ void loop()
     } else {
       printlnD("IDLE TIMER EXPIRED\n");
       timerExpired = false;
-      //@@@ITimer0.restartTimer();
     }
     GetGPSfixAndSendCoords(); //returns true if GPS fix coords could be sent
   } 
