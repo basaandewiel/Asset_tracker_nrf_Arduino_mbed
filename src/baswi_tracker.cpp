@@ -1,5 +1,5 @@
 //TODO@@@
-//    watchdog timer toevoegen
+//    haal interrupt timer er wer uit
 //    code optimaliseren voor power consumption (idle timer, LIS2device?)
 //    code netjes maken (ook LIS2 code)
 //    coding guidelines: defines char declarations
@@ -15,19 +15,19 @@
 
 #define DESTINATION_IP "149.210.176.132"
 #define DESTINATION_PORT "12005"
-#define WATCHDOGTIMEOUT  819000 //(25 seconds * 32768)+1
+#define WATCHDOGTIMEOUT  2949120 //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
+#define IDLE_TIMER 60 //seconds
+
 
 unsigned long baud = 115200;  //start at 115200
 
 char modem_reaction[64]; //holds last modem reaction string
 char longitude[32]; //holds longitude of last GPS fix
 char latitude[32]; //holds latitude of last GPS fix
-bool idleTimerExpired = false;
 
-//--
-int a = 5;
-int b = 10;
-int c = 20;
+//Mbed OS can help you to understand the sleep patterns of your device, 
+//specifically who is holding a sleep locks preventing your board to enter the deep sleep. To enable the tracing
+#define MBED_SLEEP_TRACING_ENABLED
 
 // SerialDebug Library
 
@@ -48,17 +48,18 @@ int c = 20;
 
 // Include SerialDebug
 #include "SerialDebug.h" // Download SerialDebug library: https://github.com/JoaoLopesF/SerialDebug
+
 #include "mbed.h"
 #include <rtos.h>
 #include "watchdog.h"
+Watchdog watchdog; // defining an object of type watchdog
+
 
 //#define Serial SerialUSB
 #include <Wire.h>
 
 #include "SparkFun_LIS2DH12.h" //Based on: http://librarymanager/All#SparkFun_LIS2DH12; adapted by baswi
 SPARKFUN_LIS2DH12 accel;       //Create instance
-//#include "lis2dh12.h"
-//#include "lis2dh12_registers.h"
 
 mbed::InterruptIn event1(p11); //p0.11 = ACCEL_INT1 //p11: accel.available -> INTR
 mbed::InterruptIn event2(p15); //p0.15 = ACCEL_INT2 //p15: gives interrupt in movement is detected @@@sensibility to be adapted
@@ -72,32 +73,27 @@ mbed::CircularBuffer<char, BUFF_SIZE> buff;
 rtos::Semaphore sem(1);
 
 
-volatile bool LIS_intr1_recvd = false; //LIS2DE accelerator interrupt 1; set to true in ISR
-volatile bool LIS_intr2_recvd = false; //LIS2DE accelerator interrupt 2; set to true in ISR
-void handle_LIS_intr1() {
-  LIS_intr1_recvd = true;
-}
-void handle_LIS_intr2() {
-  LIS_intr2_recvd = true;
-}
+// These define's must be placed at the beginning before #include "NRF52TimerInterrupt.h"
+// _TIMERINTERRUPT_LOGLEVEL_ from 0 to 4
+// Don't define _TIMERINTERRUPT_LOGLEVEL_ > 0. Only for special ISR debugging only. Can hang the system.
+// For Nano33-BLE, don't use Serial.print() in ISR as system will definitely hang.
+#define TIMER_INTERRUPT_DEBUG         0
+#define _TIMERINTERRUPT_LOGLEVEL_     0
 
-int parse_delimited_str(char *string, char **fields, int max_fields)
-{
-   int i = 0;
-   char delimiter = ' ';
+#include "NRF52_MBED_TimerInterrupt.h"
 
-   fields[i++] = string; //set field[0] to start of whole string
+#define LED_BLUE_PIN            (24u)
 
-   while ((i < max_fields) && (NULL != (string = strchr(string, delimiter)))) {
-      *string = '\0'; //replace delimiter by null char; finishing first field
-      fields[i++] = ++string; //set next field to position after delimiter found
-   }
-   //no delimiter found anymore
-   //no need to add trailing nul char, becuase input string already contained it
-   fields[i++] = ++string;
+#define TIMER0_INTERVAL_MS        30000 //30 sec
 
-   return --i; //number of fields found
-}
+volatile uint32_t preMillisTimer0 = 0;
+volatile bool timerExpired = false;
+
+// Depending on the board, you can select NRF52 Hardware Timer from NRF_TIMER_1,NRF_TIMER_3,NRF_TIMER_4 (1,3 and 4)
+// If you select the already-used NRF_TIMER_0 or NRF_TIMER_2, it'll be auto modified to use NRF_TIMER_1
+
+// Init NRF52 timer NRF_TIMER3
+NRF52_MBED_Timer ITimer0(NRF_TIMER_3);
 
 // to be used if you want to print from ISR context
 void PrintToBuffer(char* val)
@@ -132,8 +128,47 @@ void PrintToBuffer(char* val)
 }
 
 
+volatile bool LIS_intr1_recvd = false; //LIS2DE accelerator interrupt 1; set to true in ISR
+volatile bool LIS_intr2_recvd = false; //LIS2DE accelerator interrupt 2; set to true in ISR
+void handle_LIS_intr1() {
+  LIS_intr1_recvd = true;
+}
+void handle_LIS_intr2() {
+  LIS_intr2_recvd = true;
+}
 
-void GetModemReaction()
+
+void TimerHandler0()
+{  
+//  preMillisTimer0 = millis();
+  timerExpired = true;
+  digitalWrite(LED_BLUE_PIN, HIGH);
+  thread_sleep_for(4000); //signal timeout via blue led
+  digitalWrite(LED_BLUE_PIN, LOW);
+}
+
+
+int parse_delimited_str(char *string, char **fields, int max_fields)
+{
+   int i = 0;
+   char delimiter = ' ';
+
+   fields[i++] = string; //set field[0] to start of whole string
+
+   while ((i < max_fields) && (NULL != (string = strchr(string, delimiter)))) {
+      *string = '\0'; //replace delimiter by null char; finishing first field
+      fields[i++] = ++string; //set next field to position after delimiter found
+   }
+   //no delimiter found anymore
+   //no need to add trailing nul char, becuase input string already contained it
+   fields[i++] = ++string;
+
+   return --i; //number of fields found
+}
+
+
+
+void GetModemReaction() //%%%
 {
   int8_t index = 0;
 
@@ -142,7 +177,9 @@ void GetModemReaction()
   {
     printlnV("modem_stream.available = yes");
     modem_reaction[index++] = MODEM_STREAM.read();
-    printA(modem_reaction[(index-1)]); //print reaction to console
+    printV(modem_reaction[(index-1)]); //print reaction to console
+
+    watchdog.reload(); //kick watchdog, as long as modem reacts => watchogtimer > idletimer
     //PrintToBuffer(&c); //print char to circular buffer
   }
 
@@ -155,6 +192,7 @@ void GetModemReaction()
 }
 
 void printDataWaitingInBuf(){
+  printlnV("Enter")
   //This function is used together with PrintToBuffer, and is necessary if you want to print from ISR context
   char data = 0;
   
@@ -168,6 +206,7 @@ void printDataWaitingInBuf(){
     Serial.println("");
     sem.release();
   }
+  printlnV("Exit");
 }
 
 
@@ -309,7 +348,7 @@ void InitSodaqNRFaccel()
     Serial.println("Accelerometer not detected. Check address jumper and wiring. Freezing...");
     while (100)
       ;
-  }
+  } 
   printlnD("Accelerometer detected"); 
   printlnV("Exit function");
 }
@@ -335,7 +374,7 @@ bool SendGPScoords()
   //send longitude and latitude
   //create string "AT#XSENDTO="IP-number",<port number>,1,"<Longitude>, <Latitude>"\r\n"); 
   strcpy(modemstring, "AT#XSENDTO=\""); 
-  strcat(modemstring, DESTINATION_IP); //%%%
+  strcat(modemstring, DESTINATION_IP); 
   strcat(modemstring, "\","); 
   strcat(modemstring, DESTINATION_PORT); 
   strcat(modemstring, ",1,"); 
@@ -386,44 +425,63 @@ void GetGPSfixAndSendCoords()
 }
 
 
-#define MODEM_POLL_TIME 100
-#define STOP_FLAG 0xEF
+#define MODEM_POLL_TIME 500
 #define MODEMPOLL_THREAD_STACK 1024 //was 224
-#define IDLE_THREAD_STACK 384
-static rtos::EventFlags idle_ef;
+#define IDLE_THREAD_STACK 1024 //was 384
+
 void T_getModemReaction() //mbed Thread
 {
   while (1) {
-    GetModemReaction();
-    //Serial.println("Thread getmodemReaction");
-    //thread_sleep_for(MODEM_POLL_TIME);
-    rtos::ThisThread::sleep_for(1000); //put RTOS thread in to sleep
+    GetModemReaction();    
+    rtos::ThisThread::sleep_for(MODEM_POLL_TIME); //put RTOS thread in to sleep
     }
 }
 
-void idle()
+void idle() 
 {
-    while (1) {
-        thread_sleep_for(60000);
-        idleTimerExpired = true;
-    }
+  while (1) {
+    printlnV("idle thread - ENTER");
+    rtos::ThisThread::sleep_for(30000); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
+
+    us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
+    us_timestamp_t timeInDeepSleep	= mbed_time_deepsleep(); //Provides the time spent in deep sleep mode since boot.
+    us_timestamp_t uptime = mbed_uptime();
+    printD("Percentage in sleep since boot: "); printlnD((uint8_t)(timeInSleep*100/uptime));
+    printD("Percentage in deep sleep since boot: "); printlnD((uint8_t)(timeInDeepSleep*100/uptime));
+
+    timerExpired = true;
+  }
 }
-
-Watchdog watchdog; // defining an object of type Cellphone
-
 
 void setup()
 {
+  pinMode(LED_BUILTIN,  OUTPUT);
+  pinMode(LED_BLUE_PIN, OUTPUT);
+  
+  Serial.begin(115200);
+  while (!Serial);
+  
+  delay(100);
+
   watchdog.init(WATCHDOGTIMEOUT); 
 
   rtos::Thread *modem_poll_thread = new rtos::Thread(osPriorityNormal, MODEMPOLL_THREAD_STACK, nullptr, "modem_poll_thread");
   modem_poll_thread->start(T_getModemReaction);
 
   rtos::Thread *idle_thread = new rtos::Thread(osPriorityNormal, IDLE_THREAD_STACK, nullptr, "idle_thread");
-  idle_thread->start(idle);
+  idle_thread->start(idle); 
 
-  // Start communication
-  DEBUG_STREAM.begin(baud);
+/*  // Interval in microsecs //baswi afeer some time the whole system crashes; NOT due to the watchdog
+    //so just use idle_thread with a wait; mbed puts automatically CPU in sleep
+
+  if (ITimer0.attachInterruptInterval(TIMER0_INTERVAL_MS * 1000, TimerHandler0))
+  {
+    preMillisTimer0 = millis();
+    Serial.print(F("Starting ITimer0 OK, millis() = ")); Serial.println(preMillisTimer0);
+  }
+  else {
+    Serial.println(F("Can't set ITimer0. Select another freq. or timer"));
+  }*/
 
   InitSodaqNRF();
 
@@ -446,50 +504,37 @@ void setup()
 //  debugAddGlobalInt(F("c"), &c);
 #endif // DEBUG_DISABLE_DEBUGGER
 
-  while (!SerialUSB) {
-    ; // wait for serial port to connect. Needed for native USB
-  }
   printlnA("***START NRF TRACKER***");
   printlnA(" ");
   printlnA(" ");
 }
 
-
 void loop()
 {
-  //printDataWaitingInBuf(); //// check printbuffer and print contents; only neccessary if from ISR context (debug) data is written to circular buffer
-
+  //@@@printDataWaitingInBuf(); //// check printbuffer and print contents; only neccessary if from ISR context (debug) data is written to circular buffer
+  debugHandle(); //handle interactive debug settings/actions6
   // SerialDebug handle
   // Notes: if in inactive mode (until receive anything from serial),
   // it show only messages of always or errors level type
   // And the overhead during inactive mode is very low
   // Only if not DEBUG_DISABLED
 
-  //@Dane: how can I optimize this loop for power consumption? I have now an idle timer running in a separate mbed thread, and this loop loops contineously
-  watchdog.reload();
-
-  debugHandle(); 
-  if (LIS_intr1_recvd == true) {
+  if (LIS_intr1_recvd == true) { //this interrupt is never received from LIS
     printlnD("INTER 1 RECEIVED\n");
     LIS_intr1_recvd = false;
   }
-  if (LIS_intr2_recvd || idleTimerExpired) { //Movement detected OR idle timer expired
+
+  if (LIS_intr2_recvd || timerExpired) { //Movement detected OR idle timer expired
     if (LIS_intr2_recvd) {
       printlnD("LIS2DE INTERRUPT 2 - MOVEMENT DETECTED\n");
       LIS_intr2_recvd = false; //reset interrupt received flag
     } else {
       printlnD("IDLE TIMER EXPIRED\n");
-      idleTimerExpired = false;
+      timerExpired = false;
+      //@@@ITimer0.restartTimer();
     }
     GetGPSfixAndSendCoords(); //returns true if GPS fix coords could be sent
-  }
+  } 
+  rtos::ThisThread::sleep_for(1000); //put RTOS thread in to sleep
 
-//  delay(60000); //wait 60 seconds; every? modem action interrupts GPS@@@
-
-  // check if the USB virtual serial wants a new baud rate
-  // This will be used by the UEUpdater to flash new software
-  //if (DEBUG_STREAM.baud() != baud) {
-  //  baud = DEBUG_STREAM.baud();
-  //  MODEM_STREAM.begin(baud);
-  //}
 }
