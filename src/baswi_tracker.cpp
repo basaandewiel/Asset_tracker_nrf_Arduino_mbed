@@ -15,7 +15,7 @@
 #define DESTINATION_IP "149.210.176.132"
 #define DESTINATION_PORT "12005"
 #define WATCHDOGTIMEOUT  2949120 //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
-#define IDLE_TIMER 60 //seconds
+#define IDLE_TIMER 30000 //milliseconds
 
 
 unsigned long baud = 115200;  //start at 115200
@@ -124,16 +124,6 @@ void handle_LIS_intr1() {
 }
 void handle_LIS_intr2() {
   LIS_intr2_recvd = true;
-}
-
-
-void TimerHandler0()
-{  
-//  preMillisTimer0 = millis();
-  timerExpired = true;
-  digitalWrite(LED_BLUE_PIN, HIGH);
-  thread_sleep_for(4000); //signal timeout via blue led
-  digitalWrite(LED_BLUE_PIN, LOW);
 }
 
 
@@ -430,13 +420,17 @@ void idle()
 {
   while (1) {
     printlnV("idle thread - ENTER");
-    rtos::ThisThread::sleep_for(30000); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
+    rtos::ThisThread::sleep_for(IDLE_TIMER); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
 
+    digitalWrite(LED_BLUE_PIN, LOW); //flash blue led to indicate idle timer expiry
     us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
     us_timestamp_t timeInDeepSleep	= mbed_time_deepsleep(); //Provides the time spent in deep sleep mode since boot.
     us_timestamp_t uptime = mbed_uptime();
     printD("Percentage in sleep since boot: "); printlnD((uint8_t)(timeInSleep*100/uptime));
     printD("Percentage in deep sleep since boot: "); printlnD((uint8_t)(timeInDeepSleep*100/uptime));
+    
+    thread_sleep_for(1000); //signal timeout via blue led
+    digitalWrite(LED_BLUE_PIN, HIGH);
 
     timerExpired = true;
   }
@@ -444,8 +438,8 @@ void idle()
 
 void setup()
 {
-  pinMode(LED_BUILTIN,  OUTPUT);
   pinMode(LED_BLUE_PIN, OUTPUT);
+  digitalWrite(LED_BLUE_PIN, HIGH); 
   
   Serial.begin(115200);
   while (!Serial);
