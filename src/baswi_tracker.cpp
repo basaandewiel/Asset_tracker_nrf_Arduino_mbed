@@ -17,6 +17,14 @@
 //Simulate GPS-fix; a GPS fix is faked after turning on GPS; handy during indoor testing
 //enable next line to simulate a GPS fix
 #define SIMULATE_GPS
+#define GPS_POLL_INTERVAL 1000 //milliseconds; interval between checks for GPS fix
+#define GPS_TIMEOUT 60000 //milliseonds; how long wait for GPS fix before failing
+
+#define DESTINATION_IP "149.210.176.132" //destination to send GPS coordinates to
+#define DESTINATION_PORT "12005" //port to send GPS coordinates to
+#define WATCHDOGTIMEOUT  2949120 //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
+// this is built in watchdog in nRF52; resets chip when it expires.
+#define IDLE_TIMER 30000 //milliseconds; time after wich it is tried to get GPS fix and  send coordinates to destination
 
 
 // Disable all debug ? Good to release builds (production)
@@ -39,13 +47,6 @@
 
 #define DEBUG_STREAM SerialUSB
 #define MODEM_STREAM Serial2 //see pins_arduino.h
-#define GPS_POLL_INTERVAL 1000 //milliseconds 
-#define GPS_TIMEOUT 60000 //milliseonds
-
-#define DESTINATION_IP "149.210.176.132"
-#define DESTINATION_PORT "12005"
-#define WATCHDOGTIMEOUT  2949120 //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
-#define IDLE_TIMER 30000 //milliseconds
 
 
 unsigned long baud = 115200;  //start at 115200
