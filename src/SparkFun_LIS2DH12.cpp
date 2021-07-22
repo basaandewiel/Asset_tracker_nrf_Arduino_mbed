@@ -26,8 +26,6 @@
 
 #include "SparkFun_LIS2DH12.h"
 #include "Arduino.h"
-// Include SerialDebug
-#include "SerialDebug.h" // Download SerialDebug library: https://github.com/JoaoLopesF/SerialDebug
 
 //****************************************baswi inserted BEGIN
 // source https://github.com/Decawave/dwm1001-examples/blob/master/examples/twi_accel/LIS2DH12/LIS2DH12.c
@@ -60,8 +58,6 @@
 //Init accel with default settings
 bool SPARKFUN_LIS2DH12::begin(uint8_t i2cAddress, TwoWire &wirePort)
 {
-  printlnA("START");
-
   _i2cPort = &wirePort;
   _i2cAddress = i2cAddress; //Capture user's setting
 
@@ -72,37 +68,28 @@ bool SPARKFUN_LIS2DH12::begin(uint8_t i2cAddress, TwoWire &wirePort)
   if (isConnected() == false)
     return false;
 
-  static uint8_t whoamI;
-  lis2dh12_device_id_get(&dev_ctx, &whoamI);
-  printlnA("WHOAMI= ");
-  printlnA(whoamI);
-
+  //static uint8_t whoamI;
+  //lis2dh12_device_id_get(&dev_ctx, &whoamI);
 
   //Enable Block Data Update
   //  lis2dh12_block_data_update_set(&dev_ctx, PROPERTY_ENABLE); //baswi disabled default; 
 
   //Set Output Data Rate to 25Hz
-  printlnA("setdDaterate");
-  setDataRate(LIS2DH12_ODR_1Hz); //baswi changed to 1 Hz
+  setDataRate(LIS2DH12_ODR_25Hz); 
 
   //Set full scale to 2g
-  printlnA("set full scale");
   setScale(LIS2DH12_2g);
 
-  //Enable temperature sensor
-  printlnA("disable temperature");
-  disableTemperature(); //baswi disabled
+  //Disable temperature sensor
+  disableTemperature(); 
 
   //Set device in continuous mode with 12 bit resol.
 //  setMode(LIS2DH12_HR_12bit);
-// baswi- set to Low Power mode
-   printlnA("set mode");
-   //setMode(LIS2DH12_LP_8bit);
    setMode(LIS2DH12_NM_10bit);
    
    int32_t ret32;
    ret32 = lis2dh12_fifo_set(&dev_ctx, 0); //disable FIFO
-   if (ret32 != 0) printlnA("ERROR fifo_set");
+   //if (ret32 != 0) printlnA("ERROR fifo_set");
 
   uint8_t ret;
   //brief  Reference value for interrupt generation.[set]
@@ -122,20 +109,19 @@ bool SPARKFUN_LIS2DH12::begin(uint8_t i2cAddress, TwoWire &wirePort)
   lis2dh12_int1_cfg_t int1_cfg;
   int1_cfg.aoi = 0; //AOI_6D=01; movement detection
   int1_cfg._6d = 1;
-  int1_cfg.xlie = 1; //baswi: changed all bits from this one from 1->0
+  int1_cfg.xlie = 1; 
   int1_cfg.xhie = 1;
   int1_cfg.ylie = 1;
   int1_cfg.yhie = 1;
   int1_cfg.zlie = 1;
   int1_cfg.zhie = 1;
   ret = lis2dh12_int1_gen_conf_set(&dev_ctx, &int1_cfg);
-  if (ret != 0) printlnA("ERROR int1_gen_conf");
+  //if (ret != 0) printlnA("ERROR int1_gen_conf");
   lis2dh12_int1_gen_conf_get(&dev_ctx, &int1_cfg); //read value back to check values
-  printlnA("INT1_CFG after write: ");
   uint8_t *var = (uint8_t*)&int1_cfg;
-  printlnA(*var);
+  //printlnA(*var);
 
-  //set interrupt 1 
+  //set interrupt 1
   lis2dh12_ctrl_reg5_t reg5_contents;
   reg5_contents.d4d_int2 = 0;
   reg5_contents.lir_int2 = 0;
@@ -143,11 +129,11 @@ bool SPARKFUN_LIS2DH12::begin(uint8_t i2cAddress, TwoWire &wirePort)
   reg5_contents.lir_int1 = 0;  //not latch inter 1 on INTR_SRC
   reg5_contents.not_used_01 = 0;
   reg5_contents.fifo_en = 1;
-  reg5_contents.boot = 1; //@@@%%% try t set to 1
+  reg5_contents.boot = 1; //try t set to 1
   lis2dh12_write_reg(&dev_ctx, LIS2DH12_CTRL_REG5, (uint8_t*)&reg5_contents, 1);
-printlnA("INT1_CFG ATFTER REBOOT MEMORY : ");
+  //printlnA("INT1_CFG ATFTER REBOOT MEMORY : ");
   var = (uint8_t*)&int1_cfg;
-  printlnA(*var);
+  //printlnA(*var);
 
   lis2dh12_ctrl_reg6_t reg6_contents;
   reg6_contents.not_used_01 = 0;
@@ -161,7 +147,6 @@ printlnA("INT1_CFG ATFTER REBOOT MEMORY : ");
   lis2dh12_write_reg(&dev_ctx, LIS2DH12_CTRL_REG6, (uint8_t*)&reg6_contents, 1);
 
 
-
   lis2dh12_int2_cfg_t int2_cfg;
   int2_cfg.aoi = 0; //OR combination
   int2_cfg._6d = 0; //OR combination
@@ -172,11 +157,11 @@ printlnA("INT1_CFG ATFTER REBOOT MEMORY : ");
   int2_cfg.zlie = 1;
   int1_cfg.zhie = 1;
   ret = lis2dh12_int2_gen_conf_set(&dev_ctx, &int2_cfg);
-  if (ret != 0) printlnA("ERROR int2_gen_conf");
+  //if (ret != 0) printlnA("ERROR int2_gen_conf");
 
   uint8_t threshold = 1; //tried 127, 1 =7bits acc. to structure definition
   ret = lis2dh12_int1_gen_threshold_set(&dev_ctx, threshold);
-  if (ret != 0) printlnA("ERROR int1_gen_threshold_set");
+  //if (ret != 0) printlnA("ERROR int1_gen_threshold_set");
 
 //  uint8_t int1_duration = 64;
 //  lis2dh12_int1_gen_duration_set(&dev_ctx, int1_duration);
@@ -192,7 +177,7 @@ printlnA("INT1_CFG ATFTER REBOOT MEMORY : ");
   cfg_reg3.i1_ia1 = 1; //enable ia1 on INTERRUPT1
   cfg_reg3.i1_click = 1;
   ret32 = lis2dh12_pin_int1_config_set(&dev_ctx, &cfg_reg3);
-  if (ret32 != 0) printlnA("ERROR pint_int1_config_set");
+  //if (ret32 != 0) printlnA("ERROR pint_int1_config_set");
 //  uint8_t reg3_contents;
 //  lis2dh12_read_reg(&dev_ctx, LIS2DH12_CTRL_REG3, &reg3_contents,
 //                          8);
@@ -205,7 +190,7 @@ printlnA("INT1_CFG ATFTER REBOOT MEMORY : ");
 //              1 LSb = 16mg@2g / 32mg@4g / 62mg@8g / 186mg@16g
 uint8_t return2sleep_thr = 127;
 ret32 = lis2dh12_act_threshold_set(&dev_ctx, return2sleep_thr);
-if (ret32 != 0) printlnA("ERROR pint_int1_config_set");
+//if (ret32 != 0) printlnA("ERROR pint_int1_config_set");
 
 /*!
 * @brief Configures the LIS2DH12 threshold detectors.
@@ -251,8 +236,7 @@ if (ret32 != 0) printlnA("ERROR pint_int1_config_set");
 	
 	// Enable threshold event
 	//@@@vTWI_Write(INT1_CFG, u8Mode);
-
-
+  
 return true;
 }
 
@@ -627,7 +611,7 @@ uint8_t SPARKFUN_LIS2DH12::getMode(void)
 //Enable single tap detection
 void SPARKFUN_LIS2DH12::enableTapDetection()
 {
-  printlnA("START");
+  //printlnA("START");
   lis2dh12_click_cfg_t newBits;
   if (lis2dh12_tap_conf_get(&dev_ctx, &newBits) == 0)
   {
