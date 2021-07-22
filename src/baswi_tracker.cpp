@@ -1,12 +1,32 @@
 //TODO@@@
-//    code optimaliseren voor power consumption (LIS2device?)
-//    code netjes maken (ook LIS2 code)
 //    coding guidelines: defines char declarations
-//    include guards
 //    board files netjes maken (nu NRF board file over Arduino heen gecopieerd)
 //    alles in github en clonen vanaf hobby laptop
 
 #include <Arduino.h>
+
+//#define NRF_DEBUG //define NR turns debugging on
+//when debugging is turned on, which print statements are executed is determined by the SerialDebug library (see below)
+// SerialDebug Library
+
+// Disable all debug ? Good to release builds (production)
+// as nothing of SerialDebug is compiled, zero overhead :-)
+// For it just uncomment the DEBUG_DISABLED
+//#define DEBUG_DISABLED true
+#ifndef NRF_DEBUG
+  // Disable SerialDebug debugger ? No more commands and features as functions and globals
+  // Uncomment this to disable it 
+  #define DEBUG_DISABLE_DEBUGGER true
+#else
+  // Define the initial debug level here (uncomment to do it)
+  #define DEBUG_INITIAL_LEVEL DEBUG_LEVEL_VERBOSE
+  // Disable auto function name (good if your debug yet contains it)
+  //#define DEBUG_AUTO_FUNC_DISABLED true
+  // Include SerialDebug
+#endif
+#include "SerialDebug.h" // Download SerialDebug library: https://github.com/JoaoLopesF/SerialDebug
+
+
 #define DEBUG_STREAM SerialUSB
 #define MODEM_STREAM Serial2 //see pins_arduino.h
 #define GPS_POLL_INTERVAL 1000 //milliseconds 
@@ -24,24 +44,6 @@ char modem_reaction[64]; //holds last modem reaction string
 char longitude[32]; //holds longitude of last GPS fix
 char latitude[32]; //holds latitude of last GPS fix
 
-// SerialDebug Library
-// Disable all debug ? Good to release builds (production)
-// as nothing of SerialDebug is compiled, zero overhead :-)
-// For it just uncomment the DEBUG_DISABLED
-//#define DEBUG_DISABLED true
-
-// Disable SerialDebug debugger ? No more commands and features as functions and globals
-// Uncomment this to disable it 
-//#define DEBUG_DISABLE_DEBUGGER true
-
-// Define the initial debug level here (uncomment to do it)
-#define DEBUG_INITIAL_LEVEL DEBUG_LEVEL_VERBOSE
-
-// Disable auto function name (good if your debug yet contains it)
-//#define DEBUG_AUTO_FUNC_DISABLED true
-
-// Include SerialDebug
-#include "SerialDebug.h" // Download SerialDebug library: https://github.com/JoaoLopesF/SerialDebug
 
 #include "mbed.h"
 #include <rtos.h>
@@ -57,8 +59,6 @@ SPARKFUN_LIS2DH12 accel;       //Create instance
 
 mbed::InterruptIn event1(p11); //p0.11 = ACCEL_INT1 //p11: accel.available -> INTR
 mbed::InterruptIn event2(p15); //p0.15 = ACCEL_INT2 //p15: gives interrupt in movement is detected @@@sensibility to be adapted
-
-rtos::Thread CheckModemResponse; //thread to check periodically the modem response
 
 #define BUFF_SIZE 512
 mbed::CircularBuffer<char, BUFF_SIZE> buff;
@@ -78,7 +78,6 @@ rtos::Semaphore sem(1);
 
 #define TIMER0_INTERVAL_MS        30000 //30 sec
 
-volatile uint32_t preMillisTimer0 = 0;
 volatile bool timerExpired = false;
 
 // Depending on the board, you can select NRF52 Hardware Timer from NRF_TIMER_1,NRF_TIMER_3,NRF_TIMER_4 (1,3 and 4)
@@ -147,16 +146,15 @@ int parse_delimited_str(char *string, char **fields, int max_fields)
 
 
 
-void GetModemReaction() //%%%
+void GetModemReaction()
 {
   int8_t index = 0;
 
   printV("Enter function\n\r");
   while (MODEM_STREAM.available()) 
   {
-    printlnV("modem_stream.available = yes");
     modem_reaction[index++] = MODEM_STREAM.read();
-    printV(modem_reaction[(index-1)]); //print reaction to console
+    printD(modem_reaction[(index-1)]); //print reaction to console
 
     watchdog.reload(); //kick watchdog, as long as modem reacts => watchogtimer > idletimer
     //PrintToBuffer(&c); //print char to circular buffer
@@ -475,20 +473,22 @@ void setup()
 //  debugAddGlobalInt(F("c"), &c);
 #endif // DEBUG_DISABLE_DEBUGGER
 
-  printlnA("***START NRF TRACKER***");
-  printlnA(" ");
-  printlnA(" ");
+  printlnD("***START NRF TRACKER***");
+  printlnD(" ");
+  printlnD(" ");
 }
 
 void loop()
 {
   //@@@printDataWaitingInBuf(); //// check printbuffer and print contents; only neccessary if from ISR context (debug) data is written to circular buffer
-  debugHandle(); //handle interactive debug settings/actions6
-  // SerialDebug handle
-  // Notes: if in inactive mode (until receive anything from serial),
-  // it show only messages of always or errors level type
-  // And the overhead during inactive mode is very low
-  // Only if not DEBUG_DISABLED
+  #ifdef NRF_DEBUG
+    debugHandle(); //handle interactive debug settings/actions6
+    // SerialDebug handle
+    // Notes: if in inactive mode (until receive anything from serial),
+    // it show only messages of always or errors level type
+    // And the overhead during inactive mode is very low
+    // Only if not DEBUG_DISABLED
+  #endif
 
   if (LIS_intr1_recvd == true) { //this interrupt is never received from LIS
     printlnD("INTER 1 RECEIVED\n");
