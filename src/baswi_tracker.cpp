@@ -5,7 +5,7 @@
 
 #include <Arduino.h>
 //To TURN OF DEBUGGING uncomment next line
-//#define NRF_DEBUG 
+#define NRF_DEBUG 
 // when debugging is turned on, which print statements are executed is determined by the SerialDebug library (see below)
 // SerialDebug Library
 
@@ -265,7 +265,7 @@ void InitSodaqNRFaccel()
 
   if (accel.begin() == false)
   {
-    printlnE.println("Accelerometer not detected. Check address jumper and wiring. Freezing...");
+    printlnW("Accelerometer not detected. Check address jumper and wiring. Freezing...");
     while (100)
       ;
   } 
