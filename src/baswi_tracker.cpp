@@ -4,10 +4,20 @@
 //    alles in github en clonen vanaf hobby laptop
 
 #include <Arduino.h>
+
+//****************************************
+// BEGIN CUSTOMISATION
+//
+//****************************************
 //To TURN OF DEBUGGING uncomment next line
 #define NRF_DEBUG 
 // when debugging is turned on, which print statements are executed is determined by the SerialDebug library (see below)
 // SerialDebug Library
+//
+//Simulate GPS-fix; a GPS fix is faked after turning on GPS; handy during indoor testing
+//enable next line to simulate a GPS fix
+#define SIMULATE_GPS
+
 
 // Disable all debug ? Good to release builds (production)
 // as nothing of SerialDebug is compiled, zero overhead :-)
@@ -215,7 +225,9 @@ bool WaitForGPSfix()
     strptr = strstr(modem_reaction, "GPSP");
     printlnD("waiting for GPS fix");
     thread_sleep_for(GPS_POLL_INTERVAL);
-    strcpy(modem_reaction, "#XGPSP: \"long 5.174879 lat 52.226059\""); //@@@only for module testing! comment in production
+  #ifdef SIMULATE_GPS
+    strcpy(modem_reaction, "#XGPSP: \"long 5.174879 lat 52.226059\""); //simulate GPS fix for testing
+  #endif
   }
   if (strptr == NULL) {
     printlnD("NO GPS fix found");
