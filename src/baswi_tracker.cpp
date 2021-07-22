@@ -1,4 +1,5 @@
 //TODO@@@
+// reset IDLE timer after movement  detection
 //    coding guidelines: defines char declarations
 //    board files netjes maken (nu NRF board file over Arduino heen gecopieerd)
 //    alles in github en clonen vanaf hobby laptop
@@ -347,13 +348,16 @@ bool SendGPScoords()
 void GetGPSfixAndSendCoords()
 {
   printlnV("Enter function");
-
+  digitalWrite(LED_BLUE_PIN, LOW); //turn on blue led to indicate trying to get GPS fix
+  
   TurnOnSodaqNRFmodem();
   if (WaitForGPSfix()) {
     SendGPScoords();
   }
   TurnOffSodaqNRFmodem();
-  
+  //thread_sleep_for(1000); //signal timeout via blue led
+  digitalWrite(LED_BLUE_PIN, HIGH); //turn of led
+
   printlnV("Exit function");
 }
 
@@ -376,16 +380,12 @@ void idle()
     printlnV("idle thread - ENTER");
     rtos::ThisThread::sleep_for(IDLE_TIMER); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
 
-    digitalWrite(LED_BLUE_PIN, LOW); //flash blue led to indicate idle timer expiry
     us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
     us_timestamp_t timeInDeepSleep	= mbed_time_deepsleep(); //Provides the time spent in deep sleep mode since boot.
     us_timestamp_t uptime = mbed_uptime();
     printD("Percentage in sleep since boot: "); printlnD((uint8_t)(timeInSleep*100/uptime));
     printD("Percentage in deep sleep since boot: "); printlnD((uint8_t)(timeInDeepSleep*100/uptime));
     
-    thread_sleep_for(1000); //signal timeout via blue led
-    digitalWrite(LED_BLUE_PIN, HIGH);
-
     timerExpired = true;
   }
 }
