@@ -62,9 +62,6 @@ mbed::InterruptIn event2(p15); //p0.15 = ACCEL_INT2 //p15: gives interrupt in mo
 
 #define BUFF_SIZE 512
 mbed::CircularBuffer<char, BUFF_SIZE> buff;
-// Semaphores manage access to a shared resource
-// This semaphore allows one thread to access the shared buffer
-rtos::Semaphore sem(1);
 
 
 // These define's must be placed at the beginning before #include "NRF52TimerInterrupt.h"
@@ -79,42 +76,6 @@ rtos::Semaphore sem(1);
 #define TIMER0_INTERVAL_MS        30000 //30 sec
 
 volatile bool timerExpired = false;
-
-// Depending on the board, you can select NRF52 Hardware Timer from NRF_TIMER_1,NRF_TIMER_3,NRF_TIMER_4 (1,3 and 4)
-// If you select the already-used NRF_TIMER_0 or NRF_TIMER_2, it'll be auto modified to use NRF_TIMER_1
-
-// to be used if you want to print from ISR context
-void PrintToBuffer(char* val)
-{
-  // Wait for the shared resource to be free
-  sem.acquire();
-
-  // Check, whether the buffer is empty
-  // No bounds check is necessary in this case
-  // overflowing data will simply overwrite the
-  // same buffer
-  //if(!buff.empty()) //original was tested on !buff.empty; this means that when you do 2 conseq. writes in a thread 
-  //only the first one will make it
-  if ((BUFF_SIZE - (buff.size())) > (strlen(val))) //max-buf-size - what-in-use > needed
-  {
-    // Reset the buffer
-    //buff.reset();
- 
-    // Store the new message
-    int index = 0;
-    while(val[index] != '\0')
-    {
-      buff.push(val[index++]);
-    }
-    // Tell the semaphore that this thread is done writing
-    sem.release();
-  } else {
-    // Don't forget to release the semaphore
-    // Otherwise the other threads will wait forever
-    sem.release();
-    }
-}
-
 
 volatile bool LIS_intr1_recvd = false; //LIS2DE accelerator interrupt 1; set to true in ISR
 volatile bool LIS_intr2_recvd = false; //LIS2DE accelerator interrupt 2; set to true in ISR
@@ -166,24 +127,6 @@ void GetModemReaction()
     PrintToBuffer(char_array);
   }
   PrintToBuffer("Exit function\r\n");*/
-}
-
-void printDataWaitingInBuf(){
-  printlnV("Enter")
-  //This function is used together with PrintToBuffer, and is necessary if you want to print from ISR context
-  char data = 0;
-  
-  if(!buff.empty())
-  {
-    sem.acquire(); 
-    while(buff.pop(data))
-    {
-      Serial.print(data);
-    }
-    Serial.println("");
-    sem.release();
-  }
-  printlnV("Exit");
 }
 
 
