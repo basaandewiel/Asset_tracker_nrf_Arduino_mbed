@@ -4,9 +4,9 @@
 //    alles in github en clonen vanaf hobby laptop
 
 #include <Arduino.h>
-
-//#define NRF_DEBUG //define NR turns debugging on
-//when debugging is turned on, which print statements are executed is determined by the SerialDebug library (see below)
+//To TURN OF DEBUGGING uncomment next line
+//#define NRF_DEBUG 
+// when debugging is turned on, which print statements are executed is determined by the SerialDebug library (see below)
 // SerialDebug Library
 
 // Disable all debug ? Good to release builds (production)
@@ -265,7 +265,7 @@ void InitSodaqNRFaccel()
 
   if (accel.begin() == false)
   {
-    Serial.println("Accelerometer not detected. Check address jumper and wiring. Freezing...");
+    printlnE.println("Accelerometer not detected. Check address jumper and wiring. Freezing...");
     while (100)
       ;
   } 
@@ -382,8 +382,10 @@ void setup()
   pinMode(LED_BLUE_PIN, OUTPUT);
   digitalWrite(LED_BLUE_PIN, HIGH); 
   
+#ifdef NRF_DEBUG  //only open and wait for console if NRF_DEBUG is defined
   Serial.begin(115200);
   while (!Serial);
+#endif
   
   delay(100);
 
