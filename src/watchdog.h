@@ -3,11 +3,10 @@
 
 class Watchdog
 {
-  private:
-
-  public:
-    void init(uint32_t watchdogtimeout);
-    void reload();
+private:
+public:
+  void init(uint32_t watchdogtimeout);
+  void reload();
 };
 
 #endif /* NRF_WATCHDOG_H*/

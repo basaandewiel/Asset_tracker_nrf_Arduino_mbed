@@ -1,5 +1,4 @@
 //TODO@@@
-//    coding guidelines: defines char declarations
 //    board files netjes maken (nu NRF board file over Arduino heen gecopieerd)
 //    alles in github en clonen vanaf hobby laptop
 //
@@ -16,7 +15,7 @@
 // BEGIN CUSTOMISATION
 //****************************************
 //To TURN OF DEBUGGING uncomment next line
-//#define NRF_DEBUG 
+//#define NRF_DEBUG
 // when debugging is turned on, which print statements are executed is determined by the SerialDebug library (see below)
 // SerialDebug Library
 //
@@ -24,32 +23,31 @@
 //enable next line to simulate a GPS fix
 #define SIMULATE_GPS
 #define GPS_POLL_INTERVAL 1000 //milliseconds; interval between checks for GPS fix
-#define GPS_TIMEOUT 60000 //milliseonds; how long wait for GPS fix before failing
+#define GPS_TIMEOUT 60000      //milliseonds; how long wait for GPS fix before failing
 
 #define DESTINATION_IP "149.210.176.132" //destination to send GPS coordinates to
-#define DESTINATION_PORT "12005" //port to send GPS coordinates to
-#define WATCHDOGTIMEOUT  2949120 //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
+#define DESTINATION_PORT "12005"         //port to send GPS coordinates to
+#define WATCHDOGTIMEOUT 2949120          //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
 // this is built in watchdog in nRF52; resets chip when it expires.
 #define IDLE_TIMER 30000 //milliseconds; time after wich it is tried to get GPS fix and  send coordinates to destination
 //****************************************
 // END CUSTOMISATION
 //****************************************
 
-
 // Disable all debug ? Good to release builds (production)
 // as nothing of SerialDebug is compiled, zero overhead :-)
 // For it just uncomment the DEBUG_DISABLED
 //#define DEBUG_DISABLED true
 #ifndef NRF_DEBUG
-  // Disable SerialDebug debugger ? No more commands and features as functions and globals
-  // Uncomment this to disable it 
-  #define DEBUG_DISABLE_DEBUGGER true
+// Disable SerialDebug debugger ? No more commands and features as functions and globals
+// Uncomment this to disable it
+#define DEBUG_DISABLE_DEBUGGER true
 #else
-  // Define the initial debug level here (uncomment to do it)
-  #define DEBUG_INITIAL_LEVEL DEBUG_LEVEL_VERBOSE
-  // Disable auto function name (good if your debug yet contains it)
-  //#define DEBUG_AUTO_FUNC_DISABLED true
-  // Include SerialDebug
+// Define the initial debug level here (uncomment to do it)
+#define DEBUG_INITIAL_LEVEL DEBUG_LEVEL_VERBOSE
+// Disable auto function name (good if your debug yet contains it)
+//#define DEBUG_AUTO_FUNC_DISABLED true
+// Include SerialDebug
 #endif
 #include "SerialDebug.h" // Download SerialDebug library: https://github.com/JoaoLopesF/SerialDebug
 #include "mbed.h"
@@ -57,11 +55,11 @@
 #define DEBUG_STREAM SerialUSB
 #define MODEM_STREAM Serial2 //see pins_arduino.h
 
-unsigned long baud = 115200;  //start at 115200
+unsigned long baud = 115200; //start at 115200
 
 char modem_reaction[64]; //holds last modem reaction string
-char longitude[32]; //holds longitude of last GPS fix
-char latitude[32]; //holds latitude of last GPS fix
+char longitude[32];      //holds longitude of last GPS fix
+char latitude[32];       //holds latitude of last GPS fix
 us_timestamp_t timeLastGPSfix;
 
 #include "watchdog.h"
@@ -79,56 +77,53 @@ mbed::InterruptIn event2(p15); //p0.15 = ACCEL_INT2 //p15: gives interrupt in mo
 rtos::Semaphore sem_getSendGPScoords(0, 1); //0: default not needed to get and send GPS coords
 //1: maximum number of resoures; if interrupt and idle timer releae the semaphore, it is still 1, and not 2.
 
-
-
 // These define's must be placed at the beginning before #include "NRF52TimerInterrupt.h"
 // _TIMERINTERRUPT_LOGLEVEL_ from 0 to 4
 // Don't define _TIMERINTERRUPT_LOGLEVEL_ > 0. Only for special ISR debugging only. Can hang the system.
 // For Nano33-BLE, don't use Serial.print() in ISR as system will definitely hang.
-#define TIMER_INTERRUPT_DEBUG         0
-#define _TIMERINTERRUPT_LOGLEVEL_     0
+#define TIMER_INTERRUPT_DEBUG 0
+#define _TIMERINTERRUPT_LOGLEVEL_ 0
 
-#define LED_BLUE_PIN            (24u)
+#define LED_BLUE_PIN (24u)
 
-#define TIMER0_INTERVAL_MS        30000 //30 sec
+#define TIMER0_INTERVAL_MS 30000 //30 sec
 
 volatile bool timerExpired = false;
 
 volatile bool LIS_intr2_recvd = false; //LIS2DE accelerator interrupt 2; set to true in ISR
-void handle_LIS_intr2() {
+void handle_LIS_intr2()
+{
   sem_getSendGPScoords.release(); //enable getting and sending GPS coords
 }
 
-
 int parse_delimited_str(char *string, char **fields, int max_fields)
 {
-   int i = 0;
-   char delimiter = ' ';
+  int i = 0;
+  char delimiter = ' ';
 
-   fields[i++] = string; //set field[0] to start of whole string
+  fields[i++] = string; //set field[0] to start of whole string
 
-   while ((i < max_fields) && (NULL != (string = strchr(string, delimiter)))) {
-      *string = '\0'; //replace delimiter by null char; finishing first field
-      fields[i++] = ++string; //set next field to position after delimiter found
-   }
-   //no delimiter found anymore
-   //no need to add trailing nul char, becuase input string already contained it
-   fields[i++] = ++string;
+  while ((i < max_fields) && (NULL != (string = strchr(string, delimiter))))
+  {
+    *string = '\0';         //replace delimiter by null char; finishing first field
+    fields[i++] = ++string; //set next field to position after delimiter found
+  }
+  //no delimiter found anymore
+  //no need to add trailing nul char, becuase input string already contained it
+  fields[i++] = ++string;
 
-   return --i; //number of fields found
+  return --i; //number of fields found
 }
-
-
 
 void GetModemReaction()
 {
   int8_t index = 0;
 
   printV("Enter function\n\r");
-  while (MODEM_STREAM.available()) 
+  while (MODEM_STREAM.available())
   {
     modem_reaction[index++] = MODEM_STREAM.read();
-    printD(modem_reaction[(index-1)]); //print reaction to console
+    printD(modem_reaction[(index - 1)]); //print reaction to console
 
     //PrintToBuffer(&c); //print char to circular buffer
   }
@@ -141,30 +136,29 @@ void GetModemReaction()
   PrintToBuffer("Exit function\r\n");*/
 }
 
-
-void WriteStringToModem (char *Pmodemstring, char * Pcommentstring)
+void WriteStringToModem(char *Pmodemstring, char *Pcommentstring)
 {
   //AT commands starting with # are specific part of Sodaq modem application
   //AT commands starting with + or % are standard Nrf9160 modem commands
   printlnD(Pcommentstring);
-  printD(Pmodemstring); //without ln, because modem string already contains CR LF
+  printD(Pmodemstring);             //without ln, because modem string already contains CR LF
   MODEM_STREAM.write(Pmodemstring); //turn on NB-IOT, LTE-M and GPS
-  
+
   rtos::ThisThread::sleep_for(250); //do not write commands too fast to modem
 }
 
 void TurnOnSodaqNRFmodem()
 {
-  char modemstring[64] ="";
+  char modemstring[64] = "";
   char commentstring[64] = "";
 
   printlnV("Enter function");
   pinMode(NRF_ENABLE, OUTPUT);
   digitalWrite(NRF_ENABLE, HIGH);
   MODEM_STREAM.begin(baud);
-  
+
   //AT%XSYSTEMMODE=<LTE_M_support>,<NB_IoT_support>,<GNSS_support>,<LTE_preference>
-  //AT%XSYSTEMMODE=0,0,1,0 to only turn on GPS 
+  //AT%XSYSTEMMODE=0,0,1,0 to only turn on GPS
   //%XSYSTEMMODE=1,1,0,2 trun on LTE-M and NB-IOT, preference is NB-IOT
 
   strcpy(modemstring, "AT%XSYSTEMMODE=1,1,1,2\r\n");
@@ -183,11 +177,11 @@ void TurnOnSodaqNRFmodem()
   strcpy(commentstring, "Read IMSI");
   WriteStringToModem(modemstring, commentstring);
 
-//  strcpy(modemstring, "AT+CCID\r\n"); //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
-//  strcpy(commentstring, "Read ICCID");
-//  WriteStringToModem(modemstring, commentstring);
+  //  strcpy(modemstring, "AT+CCID\r\n"); //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
+  //  strcpy(commentstring, "Read ICCID");
+  //  WriteStringToModem(modemstring, commentstring);
 
-  strcpy(modemstring, "AT+CGDCONT=0,\"IP\",\"data.mono\"\r\n"); 
+  strcpy(modemstring, "AT+CGDCONT=0,\"IP\",\"data.mono\"\r\n");
   strcpy(commentstring, "set APN to Monogoto");
   WriteStringToModem(modemstring, commentstring);
   rtos::ThisThread::sleep_for(5000);
@@ -195,7 +189,7 @@ void TurnOnSodaqNRFmodem()
   strcpy(modemstring, "AT+CGDCONT?\r\n");
   strcpy(commentstring, "Check status; returns cid,IP,APN,IP-adr,0,0");
   WriteStringToModem(modemstring, commentstring);
-  
+
   printlnV("Exit function");
 }
 
@@ -204,7 +198,7 @@ bool WaitForGPSfix()
 //      else return false;
 {
   bool ret = false; //default returnvalue
-  char modemstring[64] ="";
+  char modemstring[64] = "";
   char commentstring[64] = "";
 
   printlnV("Enter function");
@@ -219,30 +213,33 @@ bool WaitForGPSfix()
 
   //wait til gps fix; something like #XGPSP: "long 5.174879 lat 52.226059" will be received
   char *strptr = NULL;
-  
-  int8_t tries = 0; //number of iterations in while loop to get GPS fix
+
+  int8_t tries = 0;                                                       //number of iterations in while loop to get GPS fix
   while ((strptr == NULL) && ((tries * GPS_POLL_INTERVAL) < GPS_TIMEOUT)) //while not fix && shorter than GPS timeout
   {
     tries++;
     strptr = strstr(modem_reaction, "GPSP");
     printlnD("waiting for GPS fix");
     thread_sleep_for(GPS_POLL_INTERVAL);
-  #ifdef SIMULATE_GPS
+#ifdef SIMULATE_GPS
     strcpy(modem_reaction, "#XGPSP: \"long 5.174879 lat 52.226059\""); //simulate GPS fix for testing
-  #endif
+#endif
   }
-  if (strptr == NULL) {
+  if (strptr == NULL)
+  {
     printlnD("NO GPS fix found");
-  } else {
+  }
+  else
+  {
     //strptr points to the start of the substring searched for
-    printlnD("GPS fix found"); 
+    printlnD("GPS fix found");
     ret = true;
 
-    char *fields[5]; //array of strings; room for 5 fields
+    char *fields[5];                                //array of strings; room for 5 fields
     parse_delimited_str(modem_reaction, fields, 5); //puts found fields in fields var
-    strcpy(longitude, fields[2]); //longitude
-    strcpy(latitude, fields[4]); //latitude
-    latitude[strlen(latitude)-1] = '\0'; //remove last character, is ", from field; single quotes because it is a char (not string)
+    strcpy(longitude, fields[2]);                   //longitude
+    strcpy(latitude, fields[4]);                    //latitude
+    latitude[strlen(latitude) - 1] = '\0';          //remove last character, is ", from field; single quotes because it is a char (not string)
 
     printlnD(longitude);
     printlnD(latitude);
@@ -251,7 +248,7 @@ bool WaitForGPSfix()
   strcpy(modemstring, "at#xgps=0\r\n");
   strcpy(commentstring, "Switch off GPS; no need to switch off GPS amplifier");
   WriteStringToModem(modemstring, commentstring);
-  
+
   printlnV("Exit function");
   return ret;
 }
@@ -266,14 +263,13 @@ void TurnOffSodaqNRFmodem()
   printlnV("Exit function");
 }
 
-
 void InitSodaqNRFaccel()
 {
   printlnV("Enter function");
   Wire.begin();
   delay(500);
 
-//use mebed style for attaching interrupts
+  //use mebed style for attaching interrupts
   event2.rise(&handle_LIS_intr2);
 
   if (accel.begin() == false)
@@ -281,8 +277,8 @@ void InitSodaqNRFaccel()
     printlnW("Accelerometer not detected. Check address jumper and wiring. Freezing...");
     while (100)
       ;
-  } 
-  printlnD("Accelerometer detected"); 
+  }
+  printlnD("Accelerometer detected");
   printlnV("Exit function");
 }
 
@@ -291,7 +287,7 @@ void InitSodaqNRF()
   printlnV("Enter function");
   pinMode(LED_BLUE_PIN, OUTPUT);
   digitalWrite(LED_BLUE_PIN, HIGH); //turn blue led off
-  
+
   watchdog.init(WATCHDOGTIMEOUT); //init watchdog
 
   InitSodaqNRFaccel();
@@ -299,8 +295,8 @@ void InitSodaqNRF()
 }
 
 bool SendGPScoords()
-{  
-  char modemstring[128] ="";
+{
+  char modemstring[128] = "";
   char commentstring[64] = "";
 
   printlnV("Enter function");
@@ -308,18 +304,18 @@ bool SendGPScoords()
   strcpy(modemstring, "AT#XSOCKET=1,2,0\r\n");
   strcpy(commentstring, "Open socket <handle><protocol><role>");
   WriteStringToModem(modemstring, commentstring);
- 
-  //send longitude and latitude
-  //create string "AT#XSENDTO="IP-number",<port number>,1,"<Longitude>, <Latitude>"\r\n"); 
-  strcpy(modemstring, "AT#XSENDTO=\""); 
-  strcat(modemstring, DESTINATION_IP); 
-  strcat(modemstring, "\","); 
-  strcat(modemstring, DESTINATION_PORT); 
-  strcat(modemstring, ",1,"); 
 
-  strcat(modemstring, "\""); //append \"
+  //send longitude and latitude
+  //create string "AT#XSENDTO="IP-number",<port number>,1,"<Longitude>, <Latitude>"\r\n");
+  strcpy(modemstring, "AT#XSENDTO=\"");
+  strcat(modemstring, DESTINATION_IP);
+  strcat(modemstring, "\",");
+  strcat(modemstring, DESTINATION_PORT);
+  strcat(modemstring, ",1,");
+
+  strcat(modemstring, "\"");      //append \"
   strcat(modemstring, longitude); //append longitude
-  strcat(modemstring, ", "); 
+  strcat(modemstring, ", ");
   strcat(modemstring, latitude); //append latitude
   strcat(modemstring, "\"\r\n"); //append \"
   strcpy(commentstring, "Send <url>,<port>,<datatype:1=plain text>,<data>");
@@ -329,18 +325,17 @@ bool SendGPScoords()
   strcpy(commentstring, "Set receive socket timeout to 3 sec");
   WriteStringToModem(modemstring, commentstring);
 
- 
   //only necessary for testing when UDP echo is configured on server
   //create string "AT#XRECVFROM="IP-number",<port number>\r\n"
   strcpy(modemstring, "AT#XRECVFROM=\""); //only necessary for testing when UDP echo is configured on server
-  strcat(modemstring, DESTINATION_IP); 
-  strcat(modemstring, "\","); 
-  strcat(modemstring, DESTINATION_PORT); 
-  strcat(modemstring, "\r\n"); 
+  strcat(modemstring, DESTINATION_IP);
+  strcat(modemstring, "\",");
+  strcat(modemstring, DESTINATION_PORT);
+  strcat(modemstring, "\r\n");
   strcpy(commentstring, "Receive <url>,<port>");
   WriteStringToModem(modemstring, commentstring);
 
-  strcpy(modemstring, "AT#XSOCKET=0\r\n"); 
+  strcpy(modemstring, "AT#XSOCKET=0\r\n");
   strcpy(commentstring, "Close the socket");
   WriteStringToModem(modemstring, commentstring);
 
@@ -348,14 +343,14 @@ bool SendGPScoords()
   return true;
 }
 
-
 void GetGPSfixAndSendCoords()
 {
   printlnV("Enter function");
   digitalWrite(LED_BLUE_PIN, LOW); //turn on blue led to indicate trying to get GPS fix
-  
+
   TurnOnSodaqNRFmodem();
-  if (WaitForGPSfix()) {
+  if (WaitForGPSfix())
+  {
     SendGPScoords();
     timeLastGPSfix = mbed_uptime(); //save time of last GPS fix and coords sent
   }
@@ -366,43 +361,47 @@ void GetGPSfixAndSendCoords()
   printlnV("Exit function");
 }
 
-
 #define MODEM_POLL_TIME 100
 #define MODEMPOLL_THREAD_STACK 1024 //was 224
-#define IDLE_THREAD_STACK 1024 //was 384
+#define IDLE_THREAD_STACK 1024      //was 384
 
 void T_getModemReaction() //mbed Thread
 {
-  while (1) {
-    GetModemReaction();    
+  while (1)
+  {
+    GetModemReaction();
     rtos::ThisThread::sleep_for(MODEM_POLL_TIME); //put RTOS thread in to sleep
-    }
+  }
 }
 
-void idle() 
+void idle()
 {
   us_timestamp_t timeSinceLastGPSfix;
-  while (1) {
+  while (1)
+  {
     printlnV("idle thread - ENTER");
     rtos::ThisThread::sleep_for(IDLE_TIMER); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
 
     timeSinceLastGPSfix = mbed_uptime() - timeLastGPSfix;
-    if (timeSinceLastGPSfix < (IDLE_TIMER*1000)) { //do not send GPS coords sooner than after IDLE_TIMER msec since last time
+    if (timeSinceLastGPSfix < (IDLE_TIMER * 1000))
+    { //do not send GPS coords sooner than after IDLE_TIMER msec since last time
       printD("timesincelastGPSfix: ");
       printlnD(timeSinceLastGPSfix);
-      
+
       printD("Extra sleep for idle timer (in msec): ");
-      printlnD((IDLE_TIMER - timeSinceLastGPSfix/1000));
-      rtos::ThisThread::sleep_for(IDLE_TIMER - timeSinceLastGPSfix/1000);
+      printlnD((IDLE_TIMER - timeSinceLastGPSfix / 1000));
+      rtos::ThisThread::sleep_for(IDLE_TIMER - timeSinceLastGPSfix / 1000);
     }
 
-    us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
-    us_timestamp_t timeInDeepSleep	= mbed_time_deepsleep(); //Provides the time spent in deep sleep mode since boot.
+    us_timestamp_t timeInSleep = mbed_time_sleep();         //Provides the time spent in sleep mode since boot.
+    us_timestamp_t timeInDeepSleep = mbed_time_deepsleep(); //Provides the time spent in deep sleep mode since boot.
     us_timestamp_t uptime = mbed_uptime();
     printlnD(uptime);
-    printA("Percentage in sleep since boot: "); printlnA((uint8_t)(timeInSleep*100/uptime));
-    printD("Percentage in deep sleep since boot: "); printlnD((uint8_t)(timeInDeepSleep*100/uptime));
-    
+    printA("Percentage in sleep since boot: ");
+    printlnA((uint8_t)(timeInSleep * 100 / uptime));
+    printD("Percentage in deep sleep since boot: ");
+    printlnD((uint8_t)(timeInDeepSleep * 100 / uptime));
+
     //timerExpired = true;
     sem_getSendGPScoords.release(); //enable getting and sending GPS coords
   }
@@ -410,21 +409,22 @@ void idle()
 
 void setup()
 {
-#ifdef NRF_DEBUG  //only open and wait for console if NRF_DEBUG is defined
+#ifdef NRF_DEBUG //only open and wait for console if NRF_DEBUG is defined
   Serial.begin(115200);
-  while (!Serial);
+  while (!Serial)
+    ;
   //only check modem reaction when debugging
   rtos::Thread *modem_poll_thread = new rtos::Thread(osPriorityNormal, MODEMPOLL_THREAD_STACK, nullptr, "modem_poll_thread");
   modem_poll_thread->start(T_getModemReaction);
 #endif
-  
+
   rtos::Thread *idle_thread = new rtos::Thread(osPriorityNormal, IDLE_THREAD_STACK, nullptr, "idle_thread");
-  idle_thread->start(idle); 
+  idle_thread->start(idle);
 
   InitSodaqNRF();
   timeLastGPSfix = mbed_uptime();
 
-  #ifndef DEBUG_DISABLE_DEBUGGER
+#ifndef DEBUG_DISABLE_DEBUGGER
   // Add Functions and global variables to SerialDebug
   // Add functions that can called from SerialDebug
 
@@ -445,15 +445,16 @@ void setup()
   printlnD(" ");
 }
 
-void loop() {
-  #ifdef NRF_DEBUG
-    debugHandle(); //handle interactive debug settings/actions6
-  #endif
+void loop()
+{
+#ifdef NRF_DEBUG
+  debugHandle(); //handle interactive debug settings/actions6
+#endif
 
   sem_getSendGPScoords.acquire(); //wait till requested to get and send GPS coords
-  printD("Semaphore acquired at: "); 
+  printD("Semaphore acquired at: ");
   printlnD(mbed_uptime());
 
   GetGPSfixAndSendCoords(); //returns true if GPS fix coords could be sent
-  watchdog.reload(); //kick watchdog, as long as modem reacts => watchogtimer > idle timer
+  watchdog.reload();        //kick watchdog, as long as modem reacts => watchogtimer > idle timer
 }
