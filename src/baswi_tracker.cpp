@@ -16,7 +16,7 @@
 // BEGIN CUSTOMISATION
 //****************************************
 //To TURN OF DEBUGGING uncomment next line
-#define NRF_DEBUG 
+//#define NRF_DEBUG 
 // when debugging is turned on, which print statements are executed is determined by the SerialDebug library (see below)
 // SerialDebug Library
 //
@@ -76,8 +76,9 @@ SPARKFUN_LIS2DH12 accel;       //Create instance
 mbed::InterruptIn event1(p11); //p0.11 = ACCEL_INT1 //p11: accel.available -> INTR
 mbed::InterruptIn event2(p15); //p0.15 = ACCEL_INT2 //p15: gives interrupt in movement is detected @@@sensibility to be adapted
 
-#define BUFF_SIZE 512
-mbed::CircularBuffer<char, BUFF_SIZE> buff;
+rtos::Semaphore sem_getSendGPScoords(0, 1); //0: default not needed to get and send GPS coords
+//1: maximum number of resoures; if interrupt and idle timer releae the semaphore, it is still 1, and not 2.
+
 
 
 // These define's must be placed at the beginning before #include "NRF52TimerInterrupt.h"
@@ -95,7 +96,7 @@ volatile bool timerExpired = false;
 
 volatile bool LIS_intr2_recvd = false; //LIS2DE accelerator interrupt 2; set to true in ISR
 void handle_LIS_intr2() {
-  LIS_intr2_recvd = true;
+  sem_getSendGPScoords.release(); //enable getting and sending GPS coords
 }
 
 
@@ -129,7 +130,6 @@ void GetModemReaction()
     modem_reaction[index++] = MODEM_STREAM.read();
     printD(modem_reaction[(index-1)]); //print reaction to console
 
-    watchdog.reload(); //kick watchdog, as long as modem reacts => watchogtimer > idletimer
     //PrintToBuffer(&c); //print char to circular buffer
   }
 
@@ -395,17 +395,16 @@ void idle()
       printlnD((IDLE_TIMER - timeSinceLastGPSfix/1000));
       rtos::ThisThread::sleep_for(IDLE_TIMER - timeSinceLastGPSfix/1000);
     }
-    //29 489 197
-    //Extra sleep for idle timer18446744044220384616
 
     us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
     us_timestamp_t timeInDeepSleep	= mbed_time_deepsleep(); //Provides the time spent in deep sleep mode since boot.
     us_timestamp_t uptime = mbed_uptime();
     printlnD(uptime);
-    printD("Percentage in sleep since boot: "); printlnD((uint8_t)(timeInSleep*100/uptime));
+    printA("Percentage in sleep since boot: "); printlnA((uint8_t)(timeInSleep*100/uptime));
     printD("Percentage in deep sleep since boot: "); printlnD((uint8_t)(timeInDeepSleep*100/uptime));
     
-    timerExpired = true;
+    //timerExpired = true;
+    sem_getSendGPScoords.release(); //enable getting and sending GPS coords
   }
 }
 
@@ -417,7 +416,6 @@ void setup()
   //only check modem reaction when debugging
   rtos::Thread *modem_poll_thread = new rtos::Thread(osPriorityNormal, MODEMPOLL_THREAD_STACK, nullptr, "modem_poll_thread");
   modem_poll_thread->start(T_getModemReaction);
-
 #endif
   
   rtos::Thread *idle_thread = new rtos::Thread(osPriorityNormal, IDLE_THREAD_STACK, nullptr, "idle_thread");
@@ -428,7 +426,6 @@ void setup()
 
   #ifndef DEBUG_DISABLE_DEBUGGER
   // Add Functions and global variables to SerialDebug
-
   // Add functions that can called from SerialDebug
 
   //debugAddFunctionVoid(F("function"), &function); // Example for function without args
@@ -448,28 +445,15 @@ void setup()
   printlnD(" ");
 }
 
-void loop()
-{
-  //@@@printDataWaitingInBuf(); //// check printbuffer and print contents; only neccessary if from ISR context (debug) data is written to circular buffer
+void loop() {
   #ifdef NRF_DEBUG
     debugHandle(); //handle interactive debug settings/actions6
-    // SerialDebug handle
-    // Notes: if in inactive mode (until receive anything from serial),
-    // it show only messages of always or errors level type
-    // And the overhead during inactive mode is very low
-    // Only if not DEBUG_DISABLED
   #endif
 
-  if (LIS_intr2_recvd || timerExpired) { //Movement detected OR idle timer expired
-    if (LIS_intr2_recvd) {
-      printlnD("LIS2DE INTERRUPT 2 - MOVEMENT DETECTED\n");
-      LIS_intr2_recvd = false; //reset interrupt received flag
-    } else {
-      printlnD("IDLE TIMER EXPIRED\n");
-      timerExpired = false;
-    }
-    GetGPSfixAndSendCoords(); //returns true if GPS fix coords could be sent
-  } 
-  rtos::ThisThread::sleep_for(1000); //put RTOS thread in to sleep
+  sem_getSendGPScoords.acquire(); //wait till requested to get and send GPS coords
+  printD("Semaphore acquired at: "); 
+  printlnD(mbed_uptime());
 
+  GetGPSfixAndSendCoords(); //returns true if GPS fix coords could be sent
+  watchdog.reload(); //kick watchdog, as long as modem reacts => watchogtimer > idle timer
 }
