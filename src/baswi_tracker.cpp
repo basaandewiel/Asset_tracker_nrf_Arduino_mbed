@@ -8,7 +8,6 @@
 
 //****************************************
 // BEGIN CUSTOMISATION
-//
 //****************************************
 //To TURN OF DEBUGGING uncomment next line
 #define NRF_DEBUG 
@@ -26,6 +25,9 @@
 #define WATCHDOGTIMEOUT  2949120 //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
 // this is built in watchdog in nRF52; resets chip when it expires.
 #define IDLE_TIMER 30000 //milliseconds; time after wich it is tried to get GPS fix and  send coordinates to destination
+//****************************************
+// END CUSTOMISATION
+//****************************************
 
 
 // Disable all debug ? Good to release builds (production)
@@ -290,6 +292,11 @@ void InitSodaqNRFaccel()
 void InitSodaqNRF()
 {
   printlnV("Enter function");
+  pinMode(LED_BLUE_PIN, OUTPUT);
+  digitalWrite(LED_BLUE_PIN, HIGH); //turn blue led off
+  
+  watchdog.init(WATCHDOGTIMEOUT); //init watchdog
+
   InitSodaqNRFaccel();
   printlnV("Exit function");
 }
@@ -392,18 +399,11 @@ void idle()
 
 void setup()
 {
-  pinMode(LED_BLUE_PIN, OUTPUT);
-  digitalWrite(LED_BLUE_PIN, HIGH); 
-  
 #ifdef NRF_DEBUG  //only open and wait for console if NRF_DEBUG is defined
   Serial.begin(115200);
   while (!Serial);
 #endif
   
-  delay(100);
-
-  watchdog.init(WATCHDOGTIMEOUT); 
-
   rtos::Thread *modem_poll_thread = new rtos::Thread(osPriorityNormal, MODEMPOLL_THREAD_STACK, nullptr, "modem_poll_thread");
   modem_poll_thread->start(T_getModemReaction);
 
