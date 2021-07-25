@@ -1,8 +1,14 @@
 //TODO@@@
-// reset IDLE timer after movement  detection
 //    coding guidelines: defines char declarations
 //    board files netjes maken (nu NRF board file over Arduino heen gecopieerd)
 //    alles in github en clonen vanaf hobby laptop
+//
+// readme.md
+// This is demo firmware for Sodaq NRF.
+// When movement is detected or the idle timer expires, it tries to get a GPS fix, and to
+// send the coordinates via UDP to a test server, that echo's them back
+// LED's
+//  Blue: On: trying to get GPS fix
 
 #include <Arduino.h>
 
@@ -46,24 +52,20 @@
   // Include SerialDebug
 #endif
 #include "SerialDebug.h" // Download SerialDebug library: https://github.com/JoaoLopesF/SerialDebug
-
-
+#include "mbed.h"
+#include <rtos.h>
 #define DEBUG_STREAM SerialUSB
 #define MODEM_STREAM Serial2 //see pins_arduino.h
-
 
 unsigned long baud = 115200;  //start at 115200
 
 char modem_reaction[64]; //holds last modem reaction string
 char longitude[32]; //holds longitude of last GPS fix
 char latitude[32]; //holds latitude of last GPS fix
+us_timestamp_t timeLastGPSfix;
 
-
-#include "mbed.h"
-#include <rtos.h>
 #include "watchdog.h"
 Watchdog watchdog; // defining an object of type watchdog
-
 
 //#define Serial SerialUSB
 #include <Wire.h>
@@ -91,11 +93,7 @@ mbed::CircularBuffer<char, BUFF_SIZE> buff;
 
 volatile bool timerExpired = false;
 
-volatile bool LIS_intr1_recvd = false; //LIS2DE accelerator interrupt 1; set to true in ISR
 volatile bool LIS_intr2_recvd = false; //LIS2DE accelerator interrupt 2; set to true in ISR
-void handle_LIS_intr1() {
-  LIS_intr1_recvd = true;
-}
 void handle_LIS_intr2() {
   LIS_intr2_recvd = true;
 }
@@ -152,7 +150,7 @@ void WriteStringToModem (char *Pmodemstring, char * Pcommentstring)
   printD(Pmodemstring); //without ln, because modem string already contains CR LF
   MODEM_STREAM.write(Pmodemstring); //turn on NB-IOT, LTE-M and GPS
   
-  rtos::ThisThread::sleep_for(500); //do not write commands too fast to modem
+  rtos::ThisThread::sleep_for(250); //do not write commands too fast to modem
 }
 
 void TurnOnSodaqNRFmodem()
@@ -276,7 +274,6 @@ void InitSodaqNRFaccel()
   delay(500);
 
 //use mebed style for attaching interrupts
-  event1.rise(&handle_LIS_intr1); 
   event2.rise(&handle_LIS_intr2);
 
   if (accel.begin() == false)
@@ -360,6 +357,7 @@ void GetGPSfixAndSendCoords()
   TurnOnSodaqNRFmodem();
   if (WaitForGPSfix()) {
     SendGPScoords();
+    timeLastGPSfix = mbed_uptime(); //save time of last GPS fix and coords sent
   }
   TurnOffSodaqNRFmodem();
   //thread_sleep_for(1000); //signal timeout via blue led
@@ -369,7 +367,7 @@ void GetGPSfixAndSendCoords()
 }
 
 
-#define MODEM_POLL_TIME 500
+#define MODEM_POLL_TIME 100
 #define MODEMPOLL_THREAD_STACK 1024 //was 224
 #define IDLE_THREAD_STACK 1024 //was 384
 
@@ -383,13 +381,27 @@ void T_getModemReaction() //mbed Thread
 
 void idle() 
 {
+  us_timestamp_t timeSinceLastGPSfix;
   while (1) {
     printlnV("idle thread - ENTER");
     rtos::ThisThread::sleep_for(IDLE_TIMER); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
 
+    timeSinceLastGPSfix = mbed_uptime() - timeLastGPSfix;
+    if (timeSinceLastGPSfix < (IDLE_TIMER*1000)) { //do not send GPS coords sooner than after IDLE_TIMER msec since last time
+      printD("timesincelastGPSfix: ");
+      printlnD(timeSinceLastGPSfix);
+      
+      printD("Extra sleep for idle timer (in msec): ");
+      printlnD((IDLE_TIMER - timeSinceLastGPSfix/1000));
+      rtos::ThisThread::sleep_for(IDLE_TIMER - timeSinceLastGPSfix/1000);
+    }
+    //29 489 197
+    //Extra sleep for idle timer18446744044220384616
+
     us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
     us_timestamp_t timeInDeepSleep	= mbed_time_deepsleep(); //Provides the time spent in deep sleep mode since boot.
     us_timestamp_t uptime = mbed_uptime();
+    printlnD(uptime);
     printD("Percentage in sleep since boot: "); printlnD((uint8_t)(timeInSleep*100/uptime));
     printD("Percentage in deep sleep since boot: "); printlnD((uint8_t)(timeInDeepSleep*100/uptime));
     
@@ -402,18 +414,18 @@ void setup()
 #ifdef NRF_DEBUG  //only open and wait for console if NRF_DEBUG is defined
   Serial.begin(115200);
   while (!Serial);
-#endif
-  
+  //only check modem reaction when debugging
   rtos::Thread *modem_poll_thread = new rtos::Thread(osPriorityNormal, MODEMPOLL_THREAD_STACK, nullptr, "modem_poll_thread");
   modem_poll_thread->start(T_getModemReaction);
 
+#endif
+  
   rtos::Thread *idle_thread = new rtos::Thread(osPriorityNormal, IDLE_THREAD_STACK, nullptr, "idle_thread");
   idle_thread->start(idle); 
 
   InitSodaqNRF();
+  timeLastGPSfix = mbed_uptime();
 
-  //baswi: printf CANNOT be used inside ISR context
-  //mutexes guard calls to stdio functions, such as printf, in the Arm C standard library, and mutexes cannot be called from an ISR.
   #ifndef DEBUG_DISABLE_DEBUGGER
   // Add Functions and global variables to SerialDebug
 
@@ -447,11 +459,6 @@ void loop()
     // And the overhead during inactive mode is very low
     // Only if not DEBUG_DISABLED
   #endif
-
-  if (LIS_intr1_recvd == true) { //this interrupt is never received from LIS
-    printlnD("INTER 1 RECEIVED\n");
-    LIS_intr1_recvd = false;
-  }
 
   if (LIS_intr2_recvd || timerExpired) { //Movement detected OR idle timer expired
     if (LIS_intr2_recvd) {
