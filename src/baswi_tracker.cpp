@@ -2,12 +2,6 @@
 //    board files netjes maken (nu NRF board file over Arduino heen gecopieerd)
 //    alles in github en clonen vanaf hobby laptop
 //
-// readme.md
-// This is demo firmware for Sodaq NRF.
-// When movement is detected or the idle timer expires, it tries to get a GPS fix, and to
-// send the coordinates via UDP to a test server, that echo's them back
-// LED's
-//  Blue: On: trying to get GPS fix
 
 #include <Arduino.h>
 
@@ -15,7 +9,7 @@
 // BEGIN CUSTOMISATION
 //****************************************
 //To TURN OF DEBUGGING uncomment next line
-//#define NRF_DEBUG
+#define NRF_DEBUG
 // when debugging is turned on, which print statements are executed is determined by the SerialDebug library (see below)
 // SerialDebug Library
 //
@@ -53,7 +47,7 @@
 #include "mbed.h"
 #include <rtos.h>
 #define DEBUG_STREAM SerialUSB
-#define MODEM_STREAM Serial2 //see pins_arduino.h
+#define MODEM_STREAM Serial2 //210728 serial2 works with board files from JW
 
 unsigned long baud = 115200; //start at 115200
 
@@ -87,8 +81,6 @@ rtos::Semaphore sem_getSendGPScoords(0, 1); //0: default not needed to get and s
 #define LED_BLUE_PIN (24u)
 
 #define TIMER0_INTERVAL_MS 30000 //30 sec
-
-volatile bool timerExpired = false;
 
 volatile bool LIS_intr2_recvd = false; //LIS2DE accelerator interrupt 2; set to true in ISR
 void handle_LIS_intr2()
@@ -124,16 +116,7 @@ void GetModemReaction()
   {
     modem_reaction[index++] = MODEM_STREAM.read();
     printD(modem_reaction[(index - 1)]); //print reaction to console
-
-    //PrintToBuffer(&c); //print char to circular buffer
   }
-
-  //char_array[index] = ""; //add CRLF and null char %%%
-  /*if (index > 0) {
-    strcpy(&char_array[index], "\r\n\0");
-    PrintToBuffer(char_array);
-  }
-  PrintToBuffer("Exit function\r\n");*/
 }
 
 void WriteStringToModem(char *Pmodemstring, char *Pcommentstring)
@@ -361,7 +344,7 @@ void GetGPSfixAndSendCoords()
   printlnV("Exit function");
 }
 
-#define MODEM_POLL_TIME 100
+#define MODEM_POLL_TIME 200
 #define MODEMPOLL_THREAD_STACK 1024 //was 224
 #define IDLE_THREAD_STACK 1024      //was 384
 
@@ -402,7 +385,6 @@ void idle()
     printD("Percentage in deep sleep since boot: ");
     printlnD((uint8_t)(timeInDeepSleep * 100 / uptime));
 
-    //timerExpired = true;
     sem_getSendGPScoords.release(); //enable getting and sending GPS coords
   }
 }
@@ -452,9 +434,6 @@ void loop()
 #endif
 
   sem_getSendGPScoords.acquire(); //wait till requested to get and send GPS coords
-  printD("Semaphore acquired at: ");
-  printlnD(mbed_uptime());
-
   GetGPSfixAndSendCoords(); //returns true if GPS fix coords could be sent
-  watchdog.reload();        //kick watchdog, as long as modem reacts => watchogtimer > idle timer
+  watchdog.reload();        //kick watchdog
 }
