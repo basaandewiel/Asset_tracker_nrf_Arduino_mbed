@@ -1,4 +1,5 @@
 //TODO@@@
+//    hoe libs in github zetten; zie ook huidige sodaq-tracker
 //    LIS3 changed address of accel
 //    board files netjes maken (nu NRF board file over Arduino heen gecopieerd)
 //    alles in github en clonen vanaf hobby laptop
@@ -96,9 +97,6 @@ Watchdog watchdog; // defining an object of type watchdog
 
 // Print the debug information on the SerialUSB
 #define USB SerialUSB
-
-// The interrupt pin for the Accelerometer is attached to D4
-#define ACC_INT_PIN 4
 
 // Threshold for interrupt trigger
 double threshold = -0.8;
