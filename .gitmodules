@@ -1,0 +1,3 @@
+[submodule "SerialDebug"]
+	path = SerialDebug
+	url = https://github.com/JoaoLopesF/SerialDebug
