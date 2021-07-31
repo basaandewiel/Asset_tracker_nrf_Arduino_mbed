@@ -41,8 +41,8 @@ POSSIBILITY OF SUCH DAMAGE.
 //Simulate GPS-fix; a GPS fix is faked after turning on GPS; handy during indoor testing
 //enable next line to simulate a GPS fix
 #define SIMULATE_GPS
-#define GPS_POLL_INTERVAL 1000 //milliseconds; interval between checks for GPS fix
-#define GPS_TIMEOUT 60000      //milliseonds; how long wait for GPS fix before failing
+#define GPS_POLL_INTERVAL 1000             //milliseconds; interval between checks for GPS fix
+#define GPS_TIMEOUT 60000                  //milliseonds; how long wait for GPS fix before failing
 #define MINTIMEBETWEENACCELINTERRUPTS 5000 //milleseconds, minimum time between handling of accel interrupts
 
 #define DESTINATION_IP "149.210.176.132" //destination to send GPS coordinates to
@@ -165,17 +165,20 @@ void GetModemReaction()
 
 void WriteStringToModem(char *Pmodemstring, char *Pcommentstring)
 {
+  using namespace std::chrono_literals;
   //AT commands starting with # are specific part of Sodaq modem application
   //AT commands starting with + or % are standard Nrf9160 modem commands
   printlnD(Pcommentstring);
-  printD(Pmodemstring);             //without ln, because modem string already contains CR LF
-  MODEM_STREAM.write(Pmodemstring); //turn on NB-IOT, LTE-M and GPS
-
-  rtos::ThisThread::sleep_for(250); //do not write commands too fast to modem
+  printD(Pmodemstring);               //without ln, because modem string already contains CR LF
+  MODEM_STREAM.write(Pmodemstring);   //turn on NB-IOT, LTE-M and GPS
+                                      
+  rtos::ThisThread::sleep_for(250ms); //do not write commands too fast to modem
 }
 
 void TurnOnSodaqNRFmodem()
 {
+  using namespace std::chrono_literals;
+
   char modemstring[64] = "";
   char commentstring[64] = "";
 
@@ -211,7 +214,7 @@ void TurnOnSodaqNRFmodem()
   strcpy(modemstring, "AT+CGDCONT=0,\"IP\",\"data.mono\"\r\n");
   strcpy(commentstring, "set APN to Monogoto");
   WriteStringToModem(modemstring, commentstring);
-  rtos::ThisThread::sleep_for(5000);
+  rtos::ThisThread::sleep_for(5000ms);
 
   strcpy(modemstring, "AT+CGDCONT?\r\n");
   strcpy(commentstring, "Check status; returns cid,IP,APN,IP-adr,0,0");
@@ -406,12 +409,14 @@ void GetGPSfixAndSendCoords()
   printlnV("Exit function");
 }
 
-#define MODEM_POLL_TIME 200
+#define MODEM_POLL_TIME 200ms
 #define MODEMPOLL_THREAD_STACK 1024 //was 224
 #define IDLE_THREAD_STACK 1024      //was 384
 
 void T_getModemReaction() //mbed Thread
 {
+  using namespace std::chrono_literals;
+
   while (1)
   {
     GetModemReaction();
@@ -421,11 +426,13 @@ void T_getModemReaction() //mbed Thread
 
 void idle()
 {
+  using namespace std::chrono_literals;
   us_timestamp_t timeSinceLastGPSfix;
   while (1)
   {
     printlnV("idle thread - ENTER");
-    rtos::ThisThread::sleep_for(IDLE_TIMER); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
+
+    rtos::ThisThread::sleep_for(std::chrono::seconds(IDLE_TIMER)); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
     printlnA("***IDLE TIMER EXPIRED***");
 
     timeSinceLastGPSfix = mbed_uptime() - timeLastGPSfix;
@@ -436,10 +443,13 @@ void idle()
 
       printD("Extra sleep for idle timer (in msec): ");
       printlnD((IDLE_TIMER - timeSinceLastGPSfix / 1000));
-      rtos::ThisThread::sleep_for(IDLE_TIMER - timeSinceLastGPSfix / 1000);
+      us_timestamp_t temp = IDLE_TIMER - timeSinceLastGPSfix / 1000;
+      std::chrono::milliseconds delay = std::chrono::milliseconds(temp);
+      rtos::ThisThread::sleep_for(delay);
+      //      rtos::ThisThread::sleep_for(IDLE_TIMER - timeSinceLastGPSfix / 1000); //gives deprecated
     }
 
-    us_timestamp_t timeInSleep = mbed_time_sleep();         //Provides the time spent in sleep mode since boot.
+    us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
     us_timestamp_t uptime = mbed_uptime();
     printA("Percentage in sleep since boot: ");
     printlnA((uint8_t)(timeInSleep * 100 / uptime));
@@ -450,7 +460,7 @@ void idle()
 
 void setup()
 {
-#ifdef NRF_DEBUG 
+#ifdef NRF_DEBUG
   debugSetLevel(DEBUG_LEVEL_DEBUG);
   Serial.begin(115200); //only open and wait for console if NRF_DEBUG is defined
   while (!Serial)
@@ -497,12 +507,12 @@ void loop()
 #ifdef NRF_DEBUG
   debugHandle(); //handle interactive debug settings/actions6
 #endif
-
-  sem_getSendGPScoords.acquire(); //wait till requested to get and send GPS coords
-//  detachInterrupt(ACCEL_INT1); //detaching and reattaching interrupt causes program to hang; so use another solution
-  GetGPSfixAndSendCoords();       //returns true if GPS fix coords could be sent
+  using namespace std::chrono_literals;            //necesary so I can use fi 10s in try_acquire_for function
+  sem_getSendGPScoords.acquire();                  //wait till requested to get and send GPS coords
+                                                   //  detachInterrupt(ACCEL_INT1); //detaching and reattaching interrupt causes program to hang; so use another solution
+  GetGPSfixAndSendCoords();                        //returns true if GPS fix coords could be sent
   thread_sleep_for(MINTIMEBETWEENACCELINTERRUPTS); //wait to prevent handing movement interrupts too fast
-  sem_getSendGPScoords.try_acquire_for(10); //discard accel interrupts that occurred in the mean time
+  sem_getSendGPScoords.try_acquire_for(10s);       //discard accel interrupts that occurred in the mean time
 
-  watchdog.reload();              //kick watchdog
+  watchdog.reload(); //kick watchdog
 }
