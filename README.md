@@ -24,9 +24,7 @@ For building you need following (the version numbers indicate with what version 
     * PlatformIO plugin (version 2.3.2) for Visual code
     * Platform: Nordic nRF52 version 8.0.0
 * Libraries
-    * Arrduino-libraries/ArduinoBLE (tested version 1.2.0)
     * joaolopesf/SerialDebug (tested version 0.9.82)
-    * armmbed/mbed-hal (tested version ^1.3.0)
     * sodaqmoja/Sodaq_LIS3DE (tested version 1.1.0)
 * Board files
     * put directory SODAQ_NRF in C:\Users\<user>\.platformio\packages\framework-arduino-mbed@2.0.0\variants\ (path for Windows)
@@ -36,9 +34,7 @@ For building you need following (the version numbers indicate with what version 
 If you like to build it with the Arduino IDE you must do following:
 * rename /src/sodaq_nrf_tracker.cpp to /src/sodaq_nrf_tracker.ino
 * install following libraries
-    * Arrduino-libraries/ArduinoBLE (tested version 1.2.0)
     * joaolopesf/SerialDebug (tested version 0.9.82)
-    * armmbed/mbed-hal (tested version ^1.3.0)
     * sodaqmoja/Sodaq_LIS3DE (tested version 1.1.0)
 * Install board files
     * Go to File, Preferences and set the following URL for the additional board files: http://downloads.sodaq.net/package_sodaq_index.json
