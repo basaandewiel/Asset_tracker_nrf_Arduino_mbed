@@ -418,7 +418,6 @@ void idle()
     }
 
     us_timestamp_t timeInSleep = mbed_time_sleep();         //Provides the time spent in sleep mode since boot.
-    us_timestamp_t timeInDeepSleep = mbed_time_deepsleep(); //Provides the time spent in deep sleep mode since boot.
     us_timestamp_t uptime = mbed_uptime();
     printA("Percentage in sleep since boot: ");
     printlnA((uint8_t)(timeInSleep * 100 / uptime));
@@ -429,8 +428,9 @@ void idle()
 
 void setup()
 {
-#ifdef NRF_DEBUG //only open and wait for console if NRF_DEBUG is defined
-  Serial.begin(115200);
+#ifdef NRF_DEBUG 
+  debugSetLevel(DEBUG_LEVEL_DEBUG);
+  Serial.begin(115200); //only open and wait for console if NRF_DEBUG is defined
   while (!Serial)
     ;
   //only check modem reaction when debugging
