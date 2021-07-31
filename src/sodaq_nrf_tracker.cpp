@@ -1,6 +1,8 @@
 //TODO@@@
 //    hoe libs in github zetten; zie ook huidige sodaq-tracker
-//    LIS3 changed address of accel
+//    fix compiler warnings
+//    auteur en copyright in files zetten
+//    acceptance testing: measuring power consumption
 //    WAITING for correct board files
 //
 
@@ -49,7 +51,7 @@
 #include "mbed.h"
 #include <rtos.h>
 #include <Sodaq_LIS3DE.h>
-Sodaq_LIS3DE accelerometer;
+Sodaq_LIS3DE accelerometer(Wire, (uint8_t)0x19);
 
 //*** serial debug***
 // Example from ladyada.net/learn/arduino/lesson4.html
@@ -66,9 +68,6 @@ int c = 20;
 // Disable SerialDebug debugger ? No more commands and features as functions and globals
 // Uncomment this to disable it
 //#define DEBUG_DISABLE_DEBUGGER true
-
-// Define the initial debug level here (uncomment to do it)
-#define DEBUG_INITIAL_LEVEL DEBUG_LEVEL_VERBOSE
 
 // Disable auto function name (good if your debug yet contains it)
 //#define DEBUG_AUTO_FUNC_DISABLED true
@@ -105,12 +104,9 @@ int now = millis();
 rtos::Semaphore sem_getSendGPScoords(0, 1); //0: default not needed to get and send GPS coords
 //1: maximum number of resoures; if interrupt and idle timer releae the semaphore, it is still 1, and not 2.
 
-volatile bool LIS_intr2_recvd = false; //LIS2DE accelerator interrupt 2; set to true in ISR
 void interrupt_event()
 {
-  // Do not print in an interrupt event when sleep is enabled.
-  //USB.println("Board flipped"); //baswi printing from ISR causes hang
-  //    interrupt_received = true;
+  //Board flipped
   sem_getSendGPScoords.release(); //enable getting and sending GPS coords
 }
 
