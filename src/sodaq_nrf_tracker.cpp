@@ -40,14 +40,14 @@ POSSIBILITY OF SUCH DAMAGE.
 //Simulate GPS-fix; a GPS fix is faked after turning on GPS; handy during indoor testing
 //enable next line to simulate a GPS fix
 #define SIMULATE_GPS
-constexpr auto GPS_POLL_INTERVAL = 1000; //milliseconds; interval between checks for GPS fix
-constexpr auto GPS_TIMEOUT = 60000; //milliseonds; how long wait for GPS fix before failing
+constexpr auto GPS_POLL_INTERVAL = 1000;                 //milliseconds; interval between checks for GPS fix
+constexpr auto GPS_TIMEOUT = 60000;                      //milliseonds; how long wait for GPS fix before failing
 constexpr auto MIN_TIME_BETWEEN_ACCEL_INTERRUPTS = 5000; //milleseconds, minimum time between handling of accel interrupts
 
 constexpr auto DESTINATION_IP = "149.210.176.132"; //destination to send GPS coordinates to
 constexpr auto DESTINATION_PORT = "12005";         //port to send GPS coordinates to
 
-constexpr auto WATCHDOGTIMEOUT = 2949120;          //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
+constexpr auto WATCHDOGTIMEOUT = 2949120; //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
 // this is built in watchdog in nRF52; resets chip when it expires.
 constexpr auto IDLE_TIMER = 30; //seconds; time after wich it is tried to get GPS fix and  send coordinates to destination
 //****************************************
@@ -200,7 +200,6 @@ void TurnOnSodaqNRFmodem()
   WriteStringToModem(modemstring, commentstring);
   rtos::ThisThread::sleep_for(std::chrono::milliseconds(5000));
 
-
   strcpy(modemstring, "AT+CGDCONT?\r\n");
   strcpy(commentstring, "Check status; returns cid,IP,APN,IP-adr,0,0");
   WriteStringToModem(modemstring, commentstring);
@@ -304,7 +303,6 @@ void InitSodaqNRFaccel()
   printlnV("Exit function");
 }
 
-
 void InitSodaqNRF()
 {
   printlnV("Enter function");
@@ -384,8 +382,8 @@ void GetGPSfixAndSendCoords()
 }
 
 constexpr auto MODEM_POLL_TIME = 200;
-constexpr auto MODEMPOLL_THREAD_STACK = 1024; 
-constexpr auto  IDLE_THREAD_STACK =  1024;
+constexpr auto MODEMPOLL_THREAD_STACK = 1024;
+constexpr auto IDLE_THREAD_STACK = 1024;
 
 void T_getModemReaction() //mbed Thread
 {
@@ -407,14 +405,14 @@ void idle()
     printlnA("***IDLE TIMER EXPIRED***");
 
     timeSinceLastGPSfix = mbed_uptime() - timeLastGPSfix; //micro seconds
-    if (timeSinceLastGPSfix < (IDLE_TIMER * 1000))
-    { //do not send GPS coords sooner than after IDLE_TIMER msec since last time
-      printD("timesincelastGPSfix: ");
-      printlnD(timeSinceLastGPSfix);
+    printD("timesincelastGPSfix: ");
+    printlnD(timeSinceLastGPSfix);
 
+    if (timeSinceLastGPSfix < (IDLE_TIMER * 1000000)) //IDLE_TIMER is in seconds
+    {                                                 //do not send GPS coords sooner than after IDLE_TIMER msec since last time
       printD("Extra sleep for idle timer (in msec): ");
-      printlnD((IDLE_TIMER - timeSinceLastGPSfix / 1000));
-      rtos::ThisThread::sleep_for(std::chrono::milliseconds(IDLE_TIMER - timeSinceLastGPSfix / 1000));
+      printlnD((IDLE_TIMER * 1000 - timeSinceLastGPSfix / 1000));
+      rtos::ThisThread::sleep_for(std::chrono::milliseconds(IDLE_TIMER * 1000 - timeSinceLastGPSfix / 1000));
     }
 
     us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
@@ -475,12 +473,12 @@ void loop()
 #ifdef NRF_DEBUG
   debugHandle(); //handle interactive debug settings/actions6
 #endif
-  sem_getSendGPScoords.acquire();                  //wait till requested to get and send GPS coords
-  GetGPSfixAndSendCoords();                        //returns true if GPS fix coords could be sent
-  
+  sem_getSendGPScoords.acquire(); //wait till requested to get and send GPS coords
+  GetGPSfixAndSendCoords();       //returns true if GPS fix coords could be sent
+
   //wait to prevent handing movement interrupts too fast
   rtos::ThisThread::sleep_for(std::chrono::milliseconds(MIN_TIME_BETWEEN_ACCEL_INTERRUPTS));
-  sem_getSendGPScoords.try_acquire_for(std::chrono::milliseconds(10));       //discard accel interrupts that occurred in the mean time
+  sem_getSendGPScoords.try_acquire_for(std::chrono::milliseconds(10)); //discard accel interrupts that occurred in the mean time
 
   watchdog.reload(); //kick watchdog
 }
