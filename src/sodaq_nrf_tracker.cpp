@@ -1,5 +1,4 @@
 //TODO@@@
-//    fix compiler warnings
 //    acceptance testing: measuring power consumption
 //    WAITING for correct board files
 //
@@ -41,15 +40,16 @@ POSSIBILITY OF SUCH DAMAGE.
 //Simulate GPS-fix; a GPS fix is faked after turning on GPS; handy during indoor testing
 //enable next line to simulate a GPS fix
 #define SIMULATE_GPS
-#define GPS_POLL_INTERVAL 1000             //milliseconds; interval between checks for GPS fix
-#define GPS_TIMEOUT 60000                  //milliseonds; how long wait for GPS fix before failing
-#define MIN_TIME_BETWEEN_ACCEL_INTERRUPTS 5000 //milleseconds, minimum time between handling of accel interrupts
+constexpr auto GPS_POLL_INTERVAL = 1000; //milliseconds; interval between checks for GPS fix
+constexpr auto GPS_TIMEOUT = 60000; //milliseonds; how long wait for GPS fix before failing
+constexpr auto MIN_TIME_BETWEEN_ACCEL_INTERRUPTS = 5000; //milleseconds, minimum time between handling of accel interrupts
 
-#define DESTINATION_IP "149.210.176.132" //destination to send GPS coordinates to
-#define DESTINATION_PORT "12005"         //port to send GPS coordinates to
-#define WATCHDOGTIMEOUT 2949120          //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
+constexpr auto DESTINATION_IP = "149.210.176.132"; //destination to send GPS coordinates to
+constexpr auto DESTINATION_PORT = "12005";         //port to send GPS coordinates to
+
+constexpr auto WATCHDOGTIMEOUT = 2949120;          //(90 seconds * 32768)+1 //watchdogtimer must be > than idle_timer
 // this is built in watchdog in nRF52; resets chip when it expires.
-#define IDLE_TIMER 30000 //milliseconds; time after wich it is tried to get GPS fix and  send coordinates to destination
+constexpr auto IDLE_TIMER = 30; //seconds; time after wich it is tried to get GPS fix and  send coordinates to destination
 //****************************************
 // END CUSTOMISATION
 //****************************************
@@ -62,28 +62,14 @@ POSSIBILITY OF SUCH DAMAGE.
 // Disable SerialDebug debugger ? No more commands and features as functions and globals
 // Uncomment this to disable it
 #define DEBUG_DISABLE_DEBUGGER true
-#else
+#else //debugging on
 // Define the initial debug level here (uncomment to do it)
 #define DEBUG_INITIAL_LEVEL DEBUG_LEVEL_DEBUG
 // Disable auto function name (good if your debug yet contains it)
 //#define DEBUG_AUTO_FUNC_DISABLED true
-// Include SerialDebug
-#endif
-#include "SerialDebug.h" // Download SerialDebug library: https://github.com/JoaoLopesF/SerialDebug
-#include "mbed.h"
-#include <rtos.h>
-#include <Sodaq_LIS3DE.h>
-Sodaq_LIS3DE accelerometer(Wire, (uint8_t)0x19);
-
-//*** serial debug***
-// Example from ladyada.net/learn/arduino/lesson4.html
-int a = 5;
-int b = 10;
-int c = 20;
-
+#include "SerialDebug.h" //SerialDebug library
 // SerialDebug Library
 // Disable all debug ? Good to release builds (production)
-// as nothing of SerialDebug is compiled, zero overhead :-)
 // For it just uncomment the DEBUG_DISABLED
 //#define DEBUG_DISABLED true
 
@@ -93,16 +79,18 @@ int c = 20;
 
 // Disable auto function name (good if your debug yet contains it)
 //#define DEBUG_AUTO_FUNC_DISABLED true
+#endif
 
-// Include SerialDebug
-#include "SerialDebug.h" // Download SerialDebug library: https://github.com/JoaoLopesF/SerialDebug
 #include "mbed.h"
 #include <rtos.h>
+#include <Sodaq_LIS3DE.h>
+Sodaq_LIS3DE accelerometer(Wire, (uint8_t)0x19);
 
+#define LED_BLUE_PIN (24u)
 #define DEBUG_STREAM SerialUSB
 #define MODEM_STREAM Serial2 //210728 serial2 works with board files from JW
 
-unsigned long baud = 115200; //start at 115200
+constexpr unsigned long baud = 115200; //start at 115200
 
 char modem_reaction[64]; //holds last modem reaction string
 char longitude[32];      //holds longitude of last GPS fix
@@ -316,16 +304,6 @@ void InitSodaqNRFaccel()
   printlnV("Exit function");
 }
 
-// These define's must be placed at the beginning before #include "NRF52TimerInterrupt.h"
-// _TIMERINTERRUPT_LOGLEVEL_ from 0 to 4
-// Don't define _TIMERINTERRUPT_LOGLEVEL_ > 0. Only for special ISR debugging only. Can hang the system.
-// For Nano33-BLE, don't use Serial.print() in ISR as system will definitely hang.
-#define TIMER_INTERRUPT_DEBUG 0
-#define _TIMERINTERRUPT_LOGLEVEL_ 0
-
-#define LED_BLUE_PIN (24u)
-
-#define TIMER0_INTERVAL_MS 30000 //30 sec
 
 void InitSodaqNRF()
 {
@@ -405,9 +383,9 @@ void GetGPSfixAndSendCoords()
   printlnV("Exit function");
 }
 
-#define MODEM_POLL_TIME 200
-#define MODEMPOLL_THREAD_STACK 1024 //was 224
-#define IDLE_THREAD_STACK 1024      //was 384
+constexpr auto MODEM_POLL_TIME = 200;
+constexpr auto MODEMPOLL_THREAD_STACK = 1024; 
+constexpr auto  IDLE_THREAD_STACK =  1024;
 
 void T_getModemReaction() //mbed Thread
 {
