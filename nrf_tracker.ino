@@ -92,6 +92,16 @@ constexpr auto IDLE_TIMER = 30; //seconds; time after wich it is tried to get GP
 //#define DEBUG_AUTO_FUNC_DISABLED true
 #endif
 
+
+#ifdef NRF_DEBUG
+  #define  printDebug 1
+#else
+  #define  printDebug 0
+#endif
+
+#define debugPrint(x) if (printDebug) { DEBUG_STREAM.print(x); }
+#define debugPrintln(x) if (printDebug) { DEBUG_STREAM.println(x); }
+
 Sodaq_LIS3DE accelerometer(Wire, (uint8_t)0x19);
 
 #define LED_BLUE_PIN (24u)
@@ -124,7 +134,7 @@ void interrupt_event() //LIS2DE interrupt; movement detected
 void parse_delimited_stdstr(std::string inputstring, char *fields[5], int max_fields)
 {
   //split inputstring if fields separated by <space> and put result in fields
-  DEBUG_STREAM.println("ENTER");
+  debugPrintln("ENTER");
 
   char *cstr = new char[inputstring.length() + 1];
   std::strcpy(cstr, inputstring.c_str());
@@ -138,18 +148,18 @@ void parse_delimited_stdstr(std::string inputstring, char *fields[5], int max_fi
     fieldnbr++;
   }
   delete[] cstr;
-  DEBUG_STREAM.println("EXIT");
+  debugPrintln("EXIT");
 }
 
 void GetModemReaction()
 {
   //Get reaction of modem to last sent modemcommand
   //this function is called from mbed thread (only when debugging is 'on')
-  DEBUG_STREAM.print("Enter function\n\r");
+  debugPrint("Enter function\n\r");
   while (MODEM_STREAM.available())
   {
     modem_reaction.push_back(MODEM_STREAM.read());
-    DEBUG_STREAM.print(modem_reaction.back());
+    debugPrint(modem_reaction.back());
   }
 }
 
@@ -159,8 +169,8 @@ void WriteStringToModem(std::string Pmodemstring, std::string Pcommentstring)
   char tmpStr[64] = "";
   //AT commands starting with # are specific part of Sodaq modem application
   //AT commands starting with + or % are standard Nrf9160 modem commands
-  DEBUG_STREAM.println(Pcommentstring.c_str());
-  DEBUG_STREAM.println(Pmodemstring.c_str());
+  debugPrintln(Pcommentstring.c_str());
+  debugPrintln(Pmodemstring.c_str());
   MODEM_STREAM.print(Pmodemstring.c_str());
   rtos::ThisThread::sleep_for(std::chrono::milliseconds(250)); //do not write commands too fast to modem
 }
@@ -173,7 +183,7 @@ void TurnOnSodaqNRFmodem()
   std::string commentstring = "";
   commentstring.reserve(64);
 
-  DEBUG_STREAM.println("Enter function");
+  debugPrintln("Enter function");
   pinMode(NRF_ENABLE, OUTPUT); //enable modem
   digitalWrite(NRF_ENABLE, HIGH);
   MODEM_STREAM.begin(baud);
@@ -211,7 +221,7 @@ void TurnOnSodaqNRFmodem()
   commentstring = "Check status; returns cid,IP,APN,IP-adr,0,0";
   WriteStringToModem(modemstring, commentstring);
 
-  DEBUG_STREAM.println("Exit function");
+  debugPrintln("Exit function");
 }
 
 bool WaitForGPSfix()
@@ -225,7 +235,7 @@ bool WaitForGPSfix()
   std::string commentstring = "";
   commentstring.reserve(64); //avoid heap fragmentation
 
-  DEBUG_STREAM.println("Enter function");
+  debugPrintln("Enter function");
 
   modemstring = "AT%XMAGPIO=1,0,0,1,1,1565,1586\r\n";
   commentstring = "Turn on amplifier for GPS";
@@ -247,7 +257,7 @@ bool WaitForGPSfix()
 #endif
     tries++;
     foundpos = modem_reaction.find("GPSP");
-    DEBUG_STREAM.println("waiting for GPS fix");
+    debugPrintln("waiting for GPS fix");
     rtos::ThisThread::sleep_for(std::chrono::milliseconds(GPS_POLL_INTERVAL));
 #ifdef SIMULATE_GPS
     modem_reaction = "#XGPSP: \"long 5.174879 lat 52.226059\"";
@@ -255,11 +265,11 @@ bool WaitForGPSfix()
   }
   if (foundpos == std::string::npos)
   {
-    DEBUG_STREAM.println("NO GPS fix found");
+    debugPrintln("NO GPS fix found");
   }
   else
   {
-    DEBUG_STREAM.println("GPS fix found");
+    debugPrintln("GPS fix found");
     ret = true;
 
     char *fields[5];
@@ -274,24 +284,24 @@ bool WaitForGPSfix()
   commentstring = "Switch off GPS; no need to switch off GPS amplifier";
   WriteStringToModem(modemstring, commentstring);
 
-  DEBUG_STREAM.println("Exit function");
+  debugPrintln("Exit function");
   return ret;
 }
 
 void TurnOffSodaqNRFmodem()
 {
-  DEBUG_STREAM.println("Enter function");
+  debugPrintln("Enter function");
   MODEM_STREAM.write("AT+CFUN=4\r\n"); //Sets the device to flight mode
   MODEM_STREAM.end();
   pinMode(NRF_ENABLE, OUTPUT);
   digitalWrite(NRF_ENABLE, LOW);
-  DEBUG_STREAM.println("Exit function");
+  debugPrintln("Exit function");
 }
 
 void InitSodaqNRFaccel()
 {
   //initialize LIS2DE accelerometer
-  DEBUG_STREAM.println("Enter function");
+  debugPrintln("Enter function");
   Wire.begin(); //Start the I2C bus
 
   pinMode(ACCEL_INT1, INPUT);
@@ -311,19 +321,19 @@ void InitSodaqNRFaccel()
       0,
       Sodaq_LIS3DE::MovementRecognition);
 
-  DEBUG_STREAM.println("Exit function");
+  debugPrintln("Exit function");
 }
 
 void InitSodaqNRF()
 {
-  DEBUG_STREAM.println("Enter function");
+  debugPrintln("Enter function");
   pinMode(LED_BLUE_PIN, OUTPUT);
   digitalWrite(LED_BLUE_PIN, HIGH); //turn blue led off
 
   watchdog.init(WATCHDOGTIMEOUT); //init watchdog
 
   InitSodaqNRFaccel();
-  DEBUG_STREAM.println("Exit function");
+  debugPrintln("Exit function");
 }
 
 bool SendGPScoords()
@@ -335,7 +345,7 @@ bool SendGPScoords()
   std::string commentstring = "";
   modemstring.reserve(64);
 
-  DEBUG_STREAM.println("Enter function");
+  debugPrintln("Enter function");
 
   modemstring = "AT#XSOCKET=1,2,0\r\n";
   commentstring = "Open socket <handle><protocol><role>";
@@ -374,13 +384,13 @@ bool SendGPScoords()
   commentstring = "Close the socket";
   WriteStringToModem(modemstring, commentstring);
 
-  DEBUG_STREAM.println("Exit function");
+  debugPrintln("Exit function");
   return true;
 }
 
 void GetGPSfixAndSendCoords()
 {
-  DEBUG_STREAM.println("Enter function");
+  debugPrintln("Enter function");
   digitalWrite(LED_BLUE_PIN, LOW); //turn on blue led to indicate trying to get GPS fix
 
   TurnOnSodaqNRFmodem();
@@ -392,7 +402,7 @@ void GetGPSfixAndSendCoords()
   TurnOffSodaqNRFmodem();
   digitalWrite(LED_BLUE_PIN, HIGH); //turn of blue led
 
-  DEBUG_STREAM.println("Exit function");
+  debugPrintln("Exit function");
 }
 
 constexpr auto MODEM_POLL_TIME = 200;
@@ -413,26 +423,26 @@ void idle()
   us_timestamp_t timeSinceLastGPSfix;
   while (1)
   {
-    DEBUG_STREAM.println("idle thread - ENTER");
+    debugPrintln("idle thread - ENTER");
 
     rtos::ThisThread::sleep_for(std::chrono::seconds(IDLE_TIMER)); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
-    DEBUG_STREAM.println("***IDLE TIMER EXPIRED***");
+    debugPrintln("***IDLE TIMER EXPIRED***");
 
     timeSinceLastGPSfix = mbed_uptime() - timeLastGPSfix; //micro seconds
-    DEBUG_STREAM.print("timesincelastGPSfix: ");
-    DEBUG_STREAM.println(timeSinceLastGPSfix);
+    debugPrint("timesincelastGPSfix: ");
+    debugPrintln(timeSinceLastGPSfix);
 
     if (timeSinceLastGPSfix < (IDLE_TIMER * 1000000)) //IDLE_TIMER is in seconds
     {                                                 //do not send GPS coords sooner than after IDLE_TIMER msec since last time
-      DEBUG_STREAM.print("Extra sleep for idle timer (in msec): ");
-      DEBUG_STREAM.println((IDLE_TIMER * 1000 - timeSinceLastGPSfix / 1000));
+      debugPrint("Extra sleep for idle timer (in msec): ");
+      debugPrintln((IDLE_TIMER * 1000 - timeSinceLastGPSfix / 1000));
       rtos::ThisThread::sleep_for(std::chrono::milliseconds(IDLE_TIMER * 1000 - timeSinceLastGPSfix / 1000));
     }
 
     us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
     us_timestamp_t uptime = mbed_uptime();
-    DEBUG_STREAM.print("Percentage in sleep since boot: ");
-    DEBUG_STREAM.println((uint8_t)(timeInSleep * 100 / uptime));
+    debugPrint("Percentage in sleep since boot: ");
+    debugPrintln((uint8_t)(timeInSleep * 100 / uptime));
 
     sem_getSendGPScoords.release(); //enable getting and sending GPS coords
   }
@@ -473,9 +483,9 @@ void setup()
 //  debugAddGlobalInt(F("c"), &c);
 #endif // DEBUG_DISABLE_DEBUGGER
 
-  DEBUG_STREAM.println("***START NRF TRACKER***");
-  DEBUG_STREAM.println(" ");
-  DEBUG_STREAM.println(" ");
+  debugPrintln("***START NRF TRACKER***");
+  debugPrintln(" ");
+  debugPrintln(" ");
 }
 
 void loop()
