@@ -18,28 +18,22 @@ It uses among others the Sodaq LIS3DE library. This library is compatible with t
 The program is guarded with a hardware watchdog.
 
 ## Building
-### Visual Code
-For building you need following (the version numbers indicate with what version development is done) 
-* Visual code (1.58.2) 
-    * PlatformIO plugin (version 2.3.2) for Visual code
-    * Platform: Nordic nRF52 version 8.0.0
-* Libraries
-    * joaolopesf/SerialDebug (tested version 0.9.82)
-    * sodaqmoja/Sodaq_LIS3DE (tested version 1.1.0)
-* Board files
-    * put directory SODAQ_NRF in C:\Users\<user>\.platformio\packages\framework-arduino-mbed@2.0.0\variants\ (path for Windows)
-
-
 ### Arduino IDE
-If you like to build it with the Arduino IDE you must do following:
-* rename .../sodaq_nrf_tracker/src/sodaq_nrf_tracker.cpp to .../sodaq_nrf_tracker/src/sodaq_nrf_tracker.ino
-* move sodaq_nrf_tracker.ino to ../sodaq_nrf_tracker/sodaq_nrf_tracker.ino (directory abover scr directory)
 * install following libraries
-    * joaolopesf/SerialDebug (tested version 0.9.82)
     * sodaqmoja/Sodaq_LIS3DE (tested version 1.1.0)
 * Install board files
     * Go to File, Preferences and set the following URL for the additional board files: http://downloads.sodaq.net/package_sodaq_index.json
 
+
+### Visual Code
+For building with VScode you need following (the version numbers indicate with what version development is done) 
+* Visual code (1.58.2) 
+    * PlatformIO plugin (version 2.3.2) for Visual code
+    * Platform: Nordic nRF52 version 8.0.0
+* Libraries
+    * sodaqmoja/Sodaq_LIS3DE (tested version 1.1.0)
+* Board files
+    * put directory SODAQ_NRF in C:\Users\<user>\.platformio\packages\framework-arduino-mbed@2.0.0\variants\ (path for Windows)
 
 ## Configuring
 The main file contains several options to customize the behaviour. From timers to faking a GPS fix.
