@@ -1,6 +1,3 @@
-[submodule "SerialDebug"]
-	path = SerialDebug
-	url = https://github.com/JoaoLopesF/SerialDebug
 [submodule "Sodaq_LIS3DE"]
 	path = Sodaq_LIS3DE
 	url = https://github.com/SodaqMoja/Sodaq_LIS3DE
