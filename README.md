@@ -32,7 +32,8 @@ For building you need following (the version numbers indicate with what version 
 
 ### Arduino IDE
 If you like to build it with the Arduino IDE you must do following:
-* rename /src/sodaq_nrf_tracker.cpp to /src/sodaq_nrf_tracker.ino
+* rename .../sodaq_nrf_tracker/src/sodaq_nrf_tracker.cpp to .../sodaq_nrf_tracker/src/sodaq_nrf_tracker.ino
+* move sodaq_nrf_tracker.ino to ../sodaq_nrf_tracker/sodaq_nrf_tracker.ino (directory abover scr directory)
 * install following libraries
     * joaolopesf/SerialDebug (tested version 0.9.82)
     * sodaqmoja/Sodaq_LIS3DE (tested version 1.1.0)
