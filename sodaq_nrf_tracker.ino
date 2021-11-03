@@ -155,7 +155,7 @@ void GetModemReaction()
 {
   //Get reaction of modem to last sent modemcommand
   //this function is called from mbed thread (only when debugging is 'on')
-  debugPrint("Enter function\n\r");
+  //debugPrint("Enter function\n\r");
   while (MODEM_STREAM.available())
   {
     modem_reaction.push_back(MODEM_STREAM.read());
