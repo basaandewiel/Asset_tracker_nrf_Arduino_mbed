@@ -157,7 +157,7 @@ void GetModemReaction()
   {
     modem_reaction.push_back(MODEM_STREAM.read());
     debugPrint(modem_reaction.back());
-    DEBUG_STREAM.print(modem_reaction.back()); //to see some activity even with NRF_DEBUG not defined
+    //DEBUG_STREAM.print(modem_reaction.back()); //to see some activity even with NRF_DEBUG not defined
   }
 }
 
