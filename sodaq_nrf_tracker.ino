@@ -1,9 +1,6 @@
 //TODO@@@
 //    acceptance testing: measuring power consumption
 //    copyright - what is needed?
-
-// TO BE TESTED
-// * NRF_DEBUG is not defined; check that GPS fix is recongized ()
 //
 /*
 Copyright (c) 2021, SODAQ
@@ -43,31 +40,25 @@ POSSIBILITY OF SUCH DAMAGE.
 // BEGIN CUSTOMISATION
 //****************************************
 //To TURN OF DEBUGGING uncomment next line
-#define NRF_DEBUG
-// when debugging is turned on, which print statements are executed is determined by the SerialDebug library (see below)
-// SerialDebug Library
-//
+#define NRF_DEBUG //print debug statements to serial
+
 //Simulate GPS-fix; a GPS fix is faked after turning on GPS; handy during indoor testing
 //enable next line to simulate a GPS fix
-//@@@211104 #define SIMULATE_GPS
+//#define SIMULATE_GPS
 constexpr auto GPS_POLL_INTERVAL = 1000;                 //milliseconds; interval between checks for GPS fix
-constexpr auto GPS_TIMEOUT = 60000;                      //milliseonds; how long wait for GPS fix before failing
+constexpr auto GPS_TIMEOUT = 180000;                      //milliseonds; how long wait for GPS fix before failing
 constexpr auto MIN_TIME_BETWEEN_ACCEL_INTERRUPTS = 5000; //milleseconds, minimum time between handling of accel interrupts
 
 constexpr auto DESTINATION_IP = "149.210.176.132"; //destination to send GPS coordinates to
 constexpr auto DESTINATION_PORT = "12005";         //port to send GPS coordinates to
 
-constexpr auto WATCHDOGTIMEOUT = 3932161; //(120 seconds * 32768)+1 //watchdogtimer must be > than (IDLE_TIMER + GPS_TIMEOUT)
+constexpr auto WATCHDOGTIMEOUT = 9830401; //(300 seconds * 32768)+1 //watchdogtimer must be > than (IDLE_TIMER + GPS_TIMEOUT)
 // this is built in watchdog in nRF52; resets chip when it expires.
 constexpr auto IDLE_TIMER = 30; //seconds; time after wich it is tried to get GPS fix and  send coordinates to destination
 //****************************************
 // END CUSTOMISATION
 //****************************************
 
-// Disable all debug ? Good to release builds (production)
-// as nothing of SerialDebug is compiled, zero overhead :-)
-// For it just uncomment the DEBUG_DISABLED
-//#define DEBUG_DISABLED true
 #ifndef NRF_DEBUG
 // Disable SerialDebug debugger ? No more commands and features as functions and globals
 // Uncomment this to disable it
@@ -93,6 +84,7 @@ constexpr auto IDLE_TIMER = 30; //seconds; time after wich it is tried to get GP
 
 //The Nrf9160 uses AT commands for communication with the modem; these commands can be found at
 //https://infocenter.nordicsemi.com/index.jsp?topic=%2Fref_at_commands%2FREF%2Fat_commands%2Fmob_termination_ctrl_status%2Fxsystemmode.html
+//https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/applications/serial_lte_modem/doc/AT_commands_intro.html
 
 
 #ifdef NRF_DEBUG
@@ -116,7 +108,7 @@ us_timestamp_t globalTime; //used for debugging
 
 constexpr unsigned long baud = 115200; //start at 115200
 
-std::string modem_reaction;
+std::string modem_reaction; //contains reaction of modem on (AT)command
 
 char longitude[15];            //longitude of last GPS fix
 char latitude[15];             //latitude of last GPS fix
@@ -136,21 +128,23 @@ void interrupt_event() //LIS2DE interrupt; movement detected
 void parse_delimited_stdstr(std::string inputstring, char *fields[5], int max_fields)
 {
   //split inputstring if fields separated by <space> and put result in fields
-  debugPrintln("ENTER");
+  debugPrintln("parse_delimited_stdstr - ENTER");
 
-  char *cstr = new char[inputstring.length() + 1];
+  char *cstr = new char[inputstring.length() + 1]; 
   std::strcpy(cstr, inputstring.c_str());
 
+  debugPrint(cstr);
+
   uint8_t fieldnbr = 0;
-  char *p = std::strtok(cstr, " ");
+  char *p = std::strtok(cstr, " "); //If a token is found, returns  pointer to the beginning of the token.
   while ((fieldnbr < max_fields) && (p != 0))
   {
-    fields[fieldnbr] = p;
-    p = std::strtok(NULL, " ");
+    fields[fieldnbr] = p; //the end token is automatically replaced by a null-character
+    p = std::strtok(NULL, " \n\r"); //separator is space OR CR
     fieldnbr++;
   }
   delete[] cstr;
-  debugPrintln("EXIT");
+  debugPrintln("parse_delimited_stdstr - EXIT");
 }
 
 void GetModemReaction()
@@ -158,17 +152,18 @@ void GetModemReaction()
   //Get reaction of modem to last sent modemcommand
   //this function is called from mbed thread (only when debugging is 'on')
   //debugPrint("Enter function\n\r");
+  modem_reaction.clear(); //clear, otherwise modem reaction is APPENDED to already received reactions
   while (MODEM_STREAM.available())
   {
     modem_reaction.push_back(MODEM_STREAM.read());
     debugPrint(modem_reaction.back());
+    DEBUG_STREAM.print(modem_reaction.back()); //to see some activity even with NRF_DEBUG not defined
   }
 }
 
 void WriteStringToModem(std::string Pmodemstring, std::string Pcommentstring)
 {
   //write Pmodmestring to modem; Pcommentstring is only for debugging
-  char tmpStr[64] = "";
   //AT commands starting with # are specific part of Sodaq modem application
   //AT commands starting with + or % are standard Nrf9160 modem commands
   debugPrintln(Pcommentstring.c_str());
@@ -186,7 +181,7 @@ void TurnOnSodaqNRFmodem()
   std::string commentstring = "";
   commentstring.reserve(128);
 
-  debugPrintln("Enter function");
+  debugPrintln("TurnOnSodaqNRFmodem - Enter function");
   pinMode(NRF_ENABLE, OUTPUT); //enable modem
   digitalWrite(NRF_ENABLE, HIGH);
   MODEM_STREAM.begin(baud);
@@ -195,38 +190,16 @@ void TurnOnSodaqNRFmodem()
   //AT%XSYSTEMMODE=0,0,1,0 to only turn on GPS
   //%XSYSTEMMODE=1,1,0,2 trun on LTE-M and NB-IOT, preference is NB-IOT
 
-//@@@211104   modemstring = "AT%XSYSTEMMODE=1,1,1,2\r\n";
-//@@@211104   commentstring = "PRE: radio off; turn on LTE-M, NB-IOT, GPS, networkpreference";
-  modemstring = "AT%XSYSTEMMODE=0,0,1,0\r\n";
-  commentstring = "ONLY turn on GPS; disable all communication";
-  WriteStringToModem(modemstring, commentstring);
-
-  modemstring = "AT+CEREG=5\r\n";
-  commentstring = "get unsolicited messages";
+  modemstring = "AT%XSYSTEMMODE=1,1,1,2\r\n"; //FAIL - I never get GPS fix; also not after CFUN 20 – Deactivates LTE without shutting down GNSS services
+  commentstring = "PRE: radio off; turn on LTE-M, NB-IOT, GPS, networkpreference";
   WriteStringToModem(modemstring, commentstring);
 
   modemstring = "AT+CFUN=1\r\n";
-  commentstring = "Set to functionality corresponding to SYSTEMMODE; NB:at+cfun=0 writes NVM";
+  commentstring = "Set func. acc. to XSYSTEMMODE";
+  modemstring = "AT+CFUN=1\r\n"; //gives error
   WriteStringToModem(modemstring, commentstring);
 
-  modemstring = "AT+CIMI\r\n"; //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
-  commentstring = "Read IMSI";
-  WriteStringToModem(modemstring, commentstring);
-
-  //  strcpy(modemstring, "AT+CCID\r\n"); //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
-  //  strcpy(commentstring, "Read ICCID");
-  //  WriteStringToModem(modemstring, commentstring);
-
-  modemstring = "AT+CGDCONT=0,\"IP\",\"data.mono\"\r\n";
-  commentstring = "set APN to Monogoto";
-  WriteStringToModem(modemstring, commentstring);
-  rtos::ThisThread::sleep_for(std::chrono::milliseconds(5000));
-
-  modemstring = "AT+CGDCONT?\r\n";
-  commentstring = "Check status; returns cid,IP,APN,IP-adr,0,0";
-  WriteStringToModem(modemstring, commentstring);
-
-  debugPrintln("Exit function");
+  debugPrintln("TurnOnSodaqNRFmodem - Exit function");
 }
 
 bool WaitForGPSfix()
@@ -234,17 +207,59 @@ bool WaitForGPSfix()
 //else return false;
 {
   bool ret = false; //default returnvalue
+  strcpy(longitude, "");          //clear
+  strcpy(latitude, "");          //clear
+
   std::string modemstring = "";
   modemstring.reserve(64); //avoid heap fragmentation
 
   std::string commentstring = "";
-  commentstring.reserve(64); //avoid heap fragmentation
+  commentstring.reserve(128); //avoid heap fragmentation
 
   debugPrintln("WaitForGPSfix - Enter function");
+  //before changing the systemmode first put modem to flight mode
+  //20:00 modemstring = "AT+CFUN=4\r\n";
+  //20:00 commentstring = "Set flight mode, before change func mode";
+  //20:00 WriteStringToModem(modemstring, commentstring);
 
-  modemstring = "AT%XMAGPIO=1,0,0,1,1,1565,1586\r\n";
-  commentstring = "Turn on amplifier for GPS";
+  //20:00 modemstring = "AT%XSYSTEMMODE=0,0,1,0\r\n";
+  //20:00 commentstring = "ONLY turn on GPS; disable all communication";
+  //20:00 WriteStringToModem(modemstring, commentstring);
+
+  modemstring = "AT%XCOEX0=1,1,1565,1586\r\n";
+  commentstring = "GPS amplifier";
   WriteStringToModem(modemstring, commentstring);
+
+
+  modemstring = "AT+CEREG=5\r\n";
+  commentstring = "get unsolicited messages";
+  WriteStringToModem(modemstring, commentstring);
+
+  //modemstring = "AT+CFUN=21\r\n"; //21 – Activates LTE without changing GNSS. @@@does this solve error on CFUN=20?
+  //commentstring = "Activates LTE without changing GNSS";
+  //WriteStringToModem(modemstring, commentstring);
+
+//turn off LTE, otherwise it takes very long to get GPS fix
+  modemstring = "AT+CFUN=20\r\n"; //20 – Deactivates LTE without shutting down GNSS services @@@gieves ERROR
+  commentstring = "Deactivates LTE without shutting down GNSS services";
+  WriteStringToModem(modemstring, commentstring);
+
+  modemstring = "AT+CFUN=31\r\n";
+  commentstring = "Activates GNSS without changing LTE.";
+//  modemstring = "AT+CFUN=1\r\n";
+//  commentstring = "Set func. acc. to XSYSTEMMODE";
+//  modemstring = "AT+CFUN=20\r\n"; //gives error
+//  commentstring = "20=Deactivates LTE without shutting down GNSS services.";
+  WriteStringToModem(modemstring, commentstring);
+
+  //modemstring = "AT+CFUN=1\r\n";
+  //commentstring = "Set to functionality corresponding to SYSTEMMODE; NB:at+cfun=0 writes NVM";
+  //WriteStringToModem(modemstring, commentstring);
+
+
+  //modemstring = "AT%XMAGPIO=1,0,0,1,1,1565,1586\r\n";
+  //commentstring = "Turn on amplifier for GPS";
+  //WriteStringToModem(modemstring, commentstring);
 
 //@@@211104   modemstring = "at#xgps=1,31\r\n";
 //@@@211104   commentstring = "Connect to GPS";
@@ -254,21 +269,29 @@ bool WaitForGPSfix()
 
   //wait til gps fix; something like #XGPSP: "long 5.174879 lat 52.226059" will be received
   std::size_t foundpos = std::string::npos;
-
-  int8_t tries = 0;                                                                      //number of iterations in while loop to get GPS fix
+  
+  uint16_t tries = 0;                                                                      //number of iterations in while loop to get GPS fix
   while ((foundpos == std::string::npos) && ((tries * GPS_POLL_INTERVAL) < GPS_TIMEOUT)) //while no fix && shorter than GPS timeout
   {
+    rtos::ThisThread::sleep_for(std::chrono::milliseconds(GPS_POLL_INTERVAL)); //not at the end of the loop; 
+    //to prevent possibility that modem string is overwritten (when debug is on), due to task getmodemreaction
+    watchdog.reload(); //kick watchdog
 #ifndef NRF_DEBUG
     GetModemReaction(); //If debug is on, modem reaction is retrieved contineously; if debug is off
                         //we need to call to get the modem reaction
 #endif
     tries++;
+    #ifdef SIMULATE_GPS
+      //modem_reaction = "#XGPSP: \"long 5.174879 lat 52.226059\"";
+      //modem_reaction = "#XGPSP: long 5.174879 lat 52.226059";
+      //when GPS is NOT simulated, modem_reaction contains two lines
+      modem_reaction = "#XGPSP: long 5.268641 lat 52.376968\n\r#XGPSP: 2021-11-13 13:56:03\n\r#XGPSP: TTFF 55s\n\r";
+      //NB: unclear whether quotes are included in response, see
+      //https://developer.nordicsemi.com/nRF_Connect_SDK_dev/doc/PR-4304/nrf/applications/serial_lte_modem/doc/GPS_AT_commands.html
+      //http://194.19.86.155/nRF_Connect_SDK/doc/1.4.2/nrf/applications/serial_lte_modem/doc/GPS_AT_commands.html
+    #endif
     foundpos = modem_reaction.find("GPSP");
-    debugPrintln("waiting for GPS fix");
-    rtos::ThisThread::sleep_for(std::chrono::milliseconds(GPS_POLL_INTERVAL));
-#ifdef SIMULATE_GPS
-    modem_reaction = "#XGPSP: \"long 5.174879 lat 52.226059\"";
-#endif
+    //debugPrintln("waiting for GPS fix");
   }
   if (foundpos == std::string::npos)
   {
@@ -276,19 +299,32 @@ bool WaitForGPSfix()
   }
   else
   {
+    //save modem reaction, so it cannot be overwritten by task getmodemreaction (when debug is on)
+    std::string saved_modem_reaction = modem_reaction;
+
     debugPrintln("GPS fix found");
     ret = true;
 
     char *fields[5];
-    parse_delimited_stdstr(modem_reaction, fields, 5); //puts found fields in fields var
-    strcpy(longitude, fields[2]);                      //longitude
+    parse_delimited_stdstr(saved_modem_reaction, fields, 5); //puts found fields in fields var
+    //as a side effect saved_modem_reaction is CHANGED; alle terminating tokens are replaced by NULL characters
 
+    strcpy(longitude, fields[2]);          //longitude
+    //@@@fields are pointers in part of string, and are not nul-terminated
+    debugPrint("longitude: ");
+    debugPrintln(longitude);
     strcpy(latitude, fields[4]);           //longitude
-    latitude[strlen(latitude) - 1] = '\0'; //remove last character, is ", from field; single quotes because it is a char (not string)
+    debugPrint("latitude: ");
+    debugPrintln(latitude);
+    //latitude[strlen(latitude) - 1] = '\0'; //remove last character, is ", from field; single quotes because it is a char (not string)
   }
   //turn off GPS
   modemstring = "at#xgps=0\r\n";
   commentstring = "Switch off GPS; no need to switch off GPS amplifier";
+  WriteStringToModem(modemstring, commentstring);
+
+  modemstring = "AT+CFUN=30\r\n";
+  commentstring = "30 – Deactivates GNSS without shutting down LTE services.";
   WriteStringToModem(modemstring, commentstring);
 
   debugPrintln("WaitForGPSfix - Exit function");
@@ -297,9 +333,20 @@ bool WaitForGPSfix()
 
 void TurnOffSodaqNRFmodem()
 {
+  std::string modemstring = "";
+  modemstring.reserve(64); //avoid heap fragmentation
+
+  std::string commentstring = "";
+  commentstring.reserve(128); //avoid heap fragmentation
+
   debugPrintln("TurnOffSodaqNRFmodem - Enter function");
-  MODEM_STREAM.write("AT+CFUN=4\r\n"); //Sets the device to flight mode
-  MODEM_STREAM.end();
+  modemstring = "AT+CFUN=4\r\n";
+  commentstring = "set flight mode";
+  WriteStringToModem(modemstring, commentstring);
+  
+  //20:00 MODEM_STREAM.write("AT+CFUN=4\r\n"); //Sets the device to flight mode
+  //20:00 MODEM_STREAM.end();
+
   pinMode(NRF_ENABLE, OUTPUT);
   digitalWrite(NRF_ENABLE, LOW);
   debugPrintln("TurnOffSodaqNRFmodem - Exit function");
@@ -308,7 +355,7 @@ void TurnOffSodaqNRFmodem()
 void InitSodaqNRFaccel()
 {
   //initialize LIS2DE accelerometer
-  debugPrintln("Enter function");
+  debugPrintln("InitSodaqNRFaccel - Enter function");
   Wire.begin(); //Start the I2C bus
 
   pinMode(ACCEL_INT1, INPUT);
@@ -328,45 +375,65 @@ void InitSodaqNRFaccel()
       0,
       Sodaq_LIS3DE::MovementRecognition);
 
-  debugPrintln("Exit function");
+  debugPrintln("InitSodaqNRFaccel - Exit function");
 }
 
 void InitSodaqNRF()
 {
-  debugPrintln("Enter function");
+  debugPrintln("InitSodaqNRF - Enter function");
   pinMode(LED_BLUE_PIN, OUTPUT);
   digitalWrite(LED_BLUE_PIN, HIGH); //turn blue led off
 
   watchdog.init(WATCHDOGTIMEOUT); //init watchdog
 
   InitSodaqNRFaccel();
-  debugPrintln("Exit function");
+  debugPrintln("InitSodaqNRF - Exit function");
 }
 
 bool SendGPScoords()
 {
   //send GPS coords to configured IP and portnr
-  std::string modemstring = "";
-  modemstring.reserve(64);
-
-  std::string commentstring = "";
+  std::string modemstring;
   modemstring.reserve(128);
+  modemstring.clear();
+
+  std::string commentstring;
+  commentstring.reserve(128);
+  commentstring.clear();
 
   debugPrintln("SendGPScoords - Enter function");
 //@@@211104 enable both LTE-M and IOT_NB
 //before changing the systemmode first put modem to flight mode
-  modemstring = "AT+CFUN=4\r\n";
-  commentstring = "Set flight mode, before change func mode";
+  //20:00 modemstring = "AT+CFUN=4\r\n";
+  //20:00 commentstring = "Set flight mode, before change func mode";
+  //20:00 WriteStringToModem(modemstring, commentstring);
+
+  //20:00 modemstring = "AT%XSYSTEMMODE=1,1,0,2\r\n";
+  //20:00 commentstring = "PRE: radio off; turn on LTE-M, NB-IOT, GPSoff, networkpreference";
+  //20:00 WriteStringToModem(modemstring, commentstring);
+
+  //20:00 modemstring = "AT+CFUN=1\r\n"; 
+  modemstring = "AT+CFUN=21\r\n"; 
+  commentstring = "21 – Activates LTE without changing GNSS.";
   WriteStringToModem(modemstring, commentstring);
 
-  modemstring = "AT%XSYSTEMMODE=1,1,0,2\r\n";
-  commentstring = "PRE: radio off; turn on LTE-M, NB-IOT, GPSoff, networkpreference";
+  modemstring = "AT+CIMI\r\n"; //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
+  commentstring = "Read IMSI";
   WriteStringToModem(modemstring, commentstring);
 
-  modemstring = "AT+CFUN=1\r\n";
-  commentstring = "Set func mode conform xsystemmode setting";
-  WriteStringToModem(modemstring, commentstring);
+  //  strcpy(modemstring, "AT+CCID\r\n"); //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
+  //  strcpy(commentstring, "Read ICCID");
+  //  WriteStringToModem(modemstring, commentstring);
 
+  modemstring = "AT+CGDCONT=0,\"IP\",\"data.mono\"\r\n";
+  commentstring = "set APN to Monogoto";
+  WriteStringToModem(modemstring, commentstring);
+  //indoors in cat take minutes before IP address is assigned
+  rtos::ThisThread::sleep_for(std::chrono::milliseconds(10000)); //increased from 5000 because no IP was received
+
+  modemstring = "AT+CGDCONT?\r\n";
+  commentstring = "Check status; returns cid,IP,APN,IP-adr,0,0"; //expect f.i. +CGDCONT: 0,"IP","data.mono","10.140.245.14",0,0
+  WriteStringToModem(modemstring, commentstring);
 
   modemstring = "AT#XSOCKET=1,2,0\r\n";
   commentstring = "Open socket <handle><protocol><role>";
@@ -447,7 +514,6 @@ void idle()
     debugPrintln("idle thread - ENTER");
 
     rtos::ThisThread::sleep_for(std::chrono::seconds(IDLE_TIMER)); //put RTOS thread in to sleep; so it doesn't fire directly after thread craetion
-    debugPrintln("***IDLE TIMER EXPIRED***");
 
     timeSinceLastGPSfix = mbed_uptime() - timeLastGPSfix; //micro seconds
     debugPrint("timesincelastGPSfix: ");
@@ -460,13 +526,49 @@ void idle()
       rtos::ThisThread::sleep_for(std::chrono::milliseconds(IDLE_TIMER * 1000 - timeSinceLastGPSfix / 1000));
     }
 
-    us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
-    us_timestamp_t uptime = mbed_uptime();
-    debugPrint("Percentage in sleep since boot: ");
-    debugPrintln((uint8_t)(timeInSleep * 100 / uptime));
+    //us_timestamp_t timeInSleep = mbed_time_sleep(); //Provides the time spent in sleep mode since boot.
+    //us_timestamp_t uptime = mbed_uptime();
+    //debugPrint("Percentage in sleep since boot: ");
+    //debugPrintln((uint8_t)(timeInSleep * 100 / uptime));
 
+    debugPrintln("***IDLE TIMER EXPIRED***");
     sem_getSendGPScoords.release(); //enable getting and sending GPS coords
   }
+}
+
+void GPStest()
+{
+  digitalWrite(LED_BLUE_PIN, LOW); //turn on blue led to indicate trying to get GPS fix
+  TurnOnSodaqNRFmodem();
+
+  std::string modemstring = "";
+  modemstring.reserve(64); //avoid heap fragmentation
+
+  std::string commentstring = "";
+  commentstring.reserve(128); //avoid heap fragmentation
+
+  //before changing the systemmode first put modem to flight mode
+  modemstring = "AT+CFUN=4\r\n";
+  commentstring = "Set flight mode, before change func mode";
+  WriteStringToModem(modemstring, commentstring);
+
+  modemstring = "AT%XSYSTEMMODE=0,0,1,0\r\n";
+  commentstring = "ONLY turn on GPS; disable all communication";
+  WriteStringToModem(modemstring, commentstring);
+
+  modemstring = "AT%XCOEX0=1,1,1565,1586\r\n";
+  commentstring = "GSP amplifier";
+  WriteStringToModem(modemstring, commentstring);
+
+  modemstring = "AT+CFUN=31\r\n";
+  commentstring = "CFUN 31";
+  WriteStringToModem(modemstring, commentstring);
+
+  modemstring = "at#xgps=1,0\r\n";
+  commentstring = "turn GPS on";
+  WriteStringToModem(modemstring, commentstring);
+
+  rtos::ThisThread::sleep_for(std::chrono::milliseconds(300000)); //wait 5 minutes
 }
 
 void setup()
@@ -480,17 +582,20 @@ void setup()
   //  ;
   //only check modem reaction contineously when debugging AND if really connected to USB serial
   rtos::ThisThread::sleep_for(std::chrono::milliseconds(3000));
-  if (DEBUG_STREAM) {
+  //if (DEBUG_STREAM) { //removed if, because value can not be trusted
     rtos::Thread *modem_poll_thread = new rtos::Thread(osPriorityNormal, MODEMPOLL_THREAD_STACK, nullptr, "modem_poll_thread");
     modem_poll_thread->start(T_getModemReaction);
-  }
+  //}
 #endif
 
+  //start idle_thread, that implements idle_timer
   rtos::Thread *idle_thread = new rtos::Thread(osPriorityNormal, IDLE_THREAD_STACK, nullptr, "idle_thread");
   idle_thread->start(idle);
 
   InitSodaqNRF();
   timeLastGPSfix = mbed_uptime();
+  //GPStest();
+  
 
 #ifndef DEBUG_DISABLE_DEBUGGER
 // Add Functions and global variables to SerialDebug
@@ -522,14 +627,24 @@ void loop()
   debugPrint("Globaltime: ");
   debugPrintln((uint8_t)(globalTime/1000000));
 
-
+  debugPrint("Waiting for IDLE_TIMER or Movement\n\n\n\n");
   sem_getSendGPScoords.acquire(); //wait till requested to get and send GPS coords
                                   //this can take up to IDLE_TIMER (default 30 seconds)
-  GetGPSfixAndSendCoords(); //this can take up to GPS_TIMEOUT (default 60 seconds)
+  globalTime = mbed_uptime();
+  debugPrint("Globaltime AFTER acquire semaphore: ");
+  debugPrintln((uint8_t)(globalTime/1000000));
+
+  GetGPSfixAndSendCoords(); //this can take up to GPS_TIMEOUT (default 180 seconds)
+
+  globalTime = mbed_uptime();
+  debugPrint("Globaltime AFTER GetGPSfixand: ");
+  debugPrintln((uint8_t)(globalTime/1000000));
 
   watchdog.reload(); //kick watchdog
 
   //wait to prevent handing movement interrupts too fast
+  //Because of  next two lines, also a IDLE TIMEOUT can be missed
   rtos::ThisThread::sleep_for(std::chrono::milliseconds(MIN_TIME_BETWEEN_ACCEL_INTERRUPTS));
-  sem_getSendGPScoords.try_acquire_for(std::chrono::milliseconds(10)); //discard accel interrupts that occurred in the mean time
+  sem_getSendGPScoords.try_acquire_for(std::chrono::milliseconds(10)); //discard accel interrupts or IDLE_TIMER expiry that occurred in the mean time
+  watchdog.reload(); //kick watchdog
 }
