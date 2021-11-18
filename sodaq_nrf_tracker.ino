@@ -48,11 +48,11 @@ POSSIBILITY OF SUCH DAMAGE.
 // BEGIN CUSTOMISATION
 //****************************************
 //To TURN OF DEBUGGING uncomment next line
-//#define NRF_DEBUG //print debug statements to serial
+#define NRF_DEBUG //print debug statements to serial
 
 //Simulate GPS-fix; a GPS fix is faked after turning on GPS; handy during indoor testing
 //enable next line to simulate a GPS fix
-//#define SIMULATE_GPS
+#define SIMULATE_GPS
 constexpr auto GPS_POLL_INTERVAL = 1000;                 //milliseconds; interval between checks for GPS fix
 constexpr auto GPS_TIMEOUT = 180000;                      //milliseonds; how long wait for GPS fix before failing
 constexpr auto MIN_TIME_BETWEEN_ACCEL_INTERRUPTS = 5000; //milleseconds, minimum time between handling of accel interrupts
@@ -197,7 +197,7 @@ void TurnOnSodaqNRFmodem()
   //AT%XSYSTEMMODE=0,0,1,0 to only turn on GPS
   //%XSYSTEMMODE=1,1,0,2 trun on LTE-M and NB-IOT, preference is NB-IOT
 
-  modemstring = "AT%XSYSTEMMODE=1,1,1,2\r\n"; //FAIL - I never get GPS fix; also not after CFUN 20 – Deactivates LTE without shutting down GNSS services
+  modemstring = "AT%XSYSTEMMODE=1,1,1,2\r\n"; 
   commentstring = "PRE: radio off; turn on LTE-M, NB-IOT, GPS, networkpreference";
   WriteStringToModem(modemstring, commentstring);
 
@@ -205,6 +205,7 @@ void TurnOnSodaqNRFmodem()
   commentstring = "Set func. acc. to XSYSTEMMODE";
   modemstring = "AT+CFUN=1\r\n"; //gives error
   WriteStringToModem(modemstring, commentstring);
+  rtos::ThisThread::sleep_for(std::chrono::milliseconds(3000)); //211118 it appears that some NRF-boards require more time, before they respond with 'Ready'
 
   debugPrintln("TurnOnSodaqNRFmodem - Exit function");
 }
@@ -237,9 +238,9 @@ bool WaitForGPSfix()
   WriteStringToModem(modemstring, commentstring);
 
 //turn off LTE, otherwise it takes very long to get GPS fix
-  modemstring = "AT+CFUN=20\r\n"; //20 – Deactivates LTE without shutting down GNSS services
-  commentstring = "Deactivates LTE without shutting down GNSS services";
-  WriteStringToModem(modemstring, commentstring);
+//  modemstring = "AT+CFUN=20\r\n"; //20 – Deactivates LTE without shutting down GNSS services; gives ALWAYS an error; so commented 211118 
+//  commentstring = "Deactivates LTE without shutting down GNSS services";
+//  WriteStringToModem(modemstring, commentstring);
 
   modemstring = "AT+CFUN=31\r\n";
   commentstring = "Activates GNSS without changing LTE.";
@@ -384,9 +385,9 @@ bool SendGPScoords()
   commentstring = "21 – Activates LTE without changing GNSS.";
   WriteStringToModem(modemstring, commentstring);
 
-  modemstring = "AT+CIMI\r\n"; //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
-  commentstring = "Read IMSI";
-  WriteStringToModem(modemstring, commentstring);
+  //modemstring = "AT+CIMI\r\n"; //read SIM card serial number (ICCID) - which the network associates with the IMSI; gives always error, so commented 211118 
+  //commentstring = "Read IMSI";
+  //WriteStringToModem(modemstring, commentstring);
 
   //  strcpy(modemstring, "AT+CCID\r\n"); //CIMI gives error; read SIM card serial number (ICCID) - which the network associates with the IMSI
   //  strcpy(commentstring, "Read ICCID");
