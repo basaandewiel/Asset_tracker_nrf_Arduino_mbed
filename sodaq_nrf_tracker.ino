@@ -5,7 +5,6 @@
 //  *compiler-macros: 
 //    NDEBUG
 //    __ASSERT_MSG
-
 //
 //    acceptance testing: measuring power consumption
 //    copyright - what is needed?
@@ -62,7 +61,7 @@ constexpr auto DESTINATION_PORT = "12005";         //port to send GPS coordinate
 
 constexpr auto WATCHDOGTIMEOUT = 9830401; //(300 seconds * 32768)+1 //watchdogtimer must be > than (IDLE_TIMER + GPS_TIMEOUT)
 // this is built in watchdog in nRF52; resets chip when it expires.
-constexpr auto IDLE_TIMER = 60; //seconds; time after wich it is tried to get GPS fix and  send coordinates to destination
+constexpr auto IDLE_TIMER = 120; //seconds; time after wich it is tried to get GPS fix and  send coordinates to destination
 //****************************************
 // END CUSTOMISATION
 //****************************************
@@ -191,19 +190,20 @@ void TurnOnSodaqNRFmodem()
   debugPrintln("TurnOnSodaqNRFmodem - Enter function");
   pinMode(NRF_ENABLE, OUTPUT); //enable modem
   digitalWrite(NRF_ENABLE, HIGH);
+  delay(1000);
   MODEM_STREAM.begin(baud);
-
+  delay(1000);
+  
   //AT%XSYSTEMMODE=<LTE_M_support>,<NB_IoT_support>,<GNSS_support>,<LTE_preference>
   //AT%XSYSTEMMODE=0,0,1,0 to only turn on GPS
-  //%XSYSTEMMODE=1,1,0,2 trun on LTE-M and NB-IOT, preference is NB-IOT
+  //%XSYSTEMMODE=1,1,0,2 turn on LTE-M and NB-IOT, preference is NB-IOT
 
   modemstring = "AT%XSYSTEMMODE=1,1,1,2\r\n"; 
-  commentstring = "PRE: radio off; turn on LTE-M, NB-IOT, GPS, networkpreference";
+  commentstring = "PRE: radio off; turn on LTE-M, NB-IOT, GPS, networkpreference=NB-IOT";
   WriteStringToModem(modemstring, commentstring);
 
   modemstring = "AT+CFUN=1\r\n";
   commentstring = "Set func. acc. to XSYSTEMMODE";
-  modemstring = "AT+CFUN=1\r\n"; //gives error
   WriteStringToModem(modemstring, commentstring);
   rtos::ThisThread::sleep_for(std::chrono::milliseconds(3000)); //211118 it appears that some NRF-boards require more time, before they respond with 'Ready'
 
@@ -242,6 +242,11 @@ bool WaitForGPSfix()
 //  commentstring = "Deactivates LTE without shutting down GNSS services";
 //  WriteStringToModem(modemstring, commentstring);
 
+//211220 inserted, because otherwise CFUN=31 gives an error
+  modemstring = "AT+CFUN=4\r\n";
+  commentstring = "set flight mode";
+  WriteStringToModem(modemstring, commentstring);
+
   modemstring = "AT+CFUN=31\r\n";
   commentstring = "Activates GNSS without changing LTE.";
   WriteStringToModem(modemstring, commentstring);
@@ -265,7 +270,8 @@ bool WaitForGPSfix()
 #endif
     tries++;
     #ifdef SIMULATE_GPS
-      modem_reaction = "#XGPSP: long 5.268641 lat 52.376968\n\r#XGPSP: 2021-11-13 13:56:03\n\r#XGPSP: TTFF 55s\n\r";
+//      modem_reaction = "#XGPSP: long 5.268641 lat 52.376968\n\r#XGPSP: 2021-11-13 13:56:03\n\r#XGPSP: TTFF 55s\n\r";
+      modem_reaction = "#XGPSS: \"track 5 use 5 unhealthy 0\"\n\r#XGPSP: \"long 5.174429 lat 52.226149\"\n\r#XGPSP: \"2021-12-20 12:32:48\""; //20/12/2021 14:15 modem reaction can contain 3 lines;
       //NB: unclear whether quotes are included in response, see
       //https://developer.nordicsemi.com/nRF_Connect_SDK_dev/doc/PR-4304/nrf/applications/serial_lte_modem/doc/GPS_AT_commands.html
       //http://194.19.86.155/nRF_Connect_SDK/doc/1.4.2/nrf/applications/serial_lte_modem/doc/GPS_AT_commands.html
@@ -293,8 +299,9 @@ bool WaitForGPSfix()
     debugPrint("longitude: ");
     debugPrintln(longitude);
     strcpy(latitude, fields[4]);           //longitude
+	latitude[strlen(latitude)-1]= '\0';		//211220 strip last " from end of latitude string
     debugPrint("latitude: ");
-    debugPrintln(latitude);
+]    debugPrintln(latitude);
     
   }
   //turn off GPS
@@ -396,11 +403,11 @@ bool SendGPScoords()
   modemstring = "AT+CGDCONT=0,\"IP\",\"data.mono\"\r\n";
   commentstring = "set APN to Monogoto";
   WriteStringToModem(modemstring, commentstring);
-  rtos::ThisThread::sleep_for(std::chrono::milliseconds(10000)); //wait for IP address to be assigned; can possibly be lowered
-
+  
   modemstring = "AT+CGDCONT?\r\n";
   commentstring = "Check status; returns cid,IP,APN,IP-adr,0,0"; //expect f.i. +CGDCONT: 0,"IP","data.mono","10.140.245.14",0,0
   WriteStringToModem(modemstring, commentstring);
+  rtos::ThisThread::sleep_for(std::chrono::milliseconds(10000)); //wait for IP address to be assigned; this can take up one minute; @@@would be better to wait until an IP address is received or certain timeout
 
   modemstring = "AT#XSOCKET=1,2,0\r\n";
   commentstring = "Open socket <handle><protocol><role>";
@@ -412,13 +419,16 @@ bool SendGPScoords()
   modemstring.append(DESTINATION_IP);
   modemstring.append("\",");
   modemstring.append(DESTINATION_PORT);
-  modemstring.append(",1,");
+  modemstring.append(",1,"); //data type =plain text; 
   modemstring.append("\"");
   modemstring.append(longitude);
   modemstring.append(", ");
   modemstring.append(latitude);
   modemstring.append("\"\r\n");
   commentstring = "Send <url>,<port>,<datatype:1=plain text>,<data>";
+  //modemstring is something like:"AT#XSENDTO=\"149.210.176.132\",12005,1,\"LONG, LAT\""; 
+  //according to URL below the parameter data type is removed. //https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/applications/serial_lte_modem/doc/SOCKET_AT_commands.html
+  //modemstring = "AT#XSENDTO=\"149.210.176.132\",12005,\"LONG, LAT\""; //211220 used for testing; however also in pass through script, this gives an error
   WriteStringToModem(modemstring, commentstring);
 
   modemstring = "at#xsocketopt=1,20,3\r\n";
@@ -546,15 +556,29 @@ void GoIntoSleepMode()
   //The nRF52 have two primary sleep modes, system on mode, and system off mode. When using timers as wakeup source, 
   //only system on sleep mode can be used, as system off mode will disable all clock sources to save power.
   //<http://infocenter.nordicsemi.com/topic/com.nordic.infocenter.nrf52832.ps.v1.1/power.html?cp=2_1_0_17_2#unique_1349410009>
-  //NRF_POWER->SYSTEMOFF = 1; //timer interrupt will NOT wake SOC
-  //nrf_pwr_mgmt_run(); 
+  //NRF_POWER->SYSTEMOFF = 1; //neither time nor accelarion interrupts wakes NRF (testen on 211120)
   
+
+  //low power mode, variable latency
+  NRF_POWER->TASKS_LOWPWR = 1; //timer and accelaration interrupts still work; @@@unknown whether it really saves power
+
+  //Disabling UART0 - baswi: serial monitor still working
+  NRF_UART0->TASKS_STOPTX = 1;
+  NRF_UART0->TASKS_STOPRX = 1;
+  NRF_UART0->ENABLE = 0;
+
+  //Disabling UARTE0 - baswi: serial monitor still working
+  NRF_UARTE0->TASKS_STOPTX = 1;
+  NRF_UARTE0->TASKS_STOPRX = 1;
+  NRF_UARTE0->ENABLE = 0;
+
+//  *(volatile uint32_t *)0x40002FFC = 0;
+//  *(volatile uint32_t *)0x40002FFC;
+//  *(volatile uint32_t *)0x40002FFC = 1; //Setting up UART registers again due to a library issue
+
+
   //put SoC in System On power mode; submode=low power (not Constant latency)
-  __WFI();  //Wait For Interrupt; timer and movement wakes SoC
-  //sleep_for(std::chrono::milliseconds(250)); //
-  //digitalWrite(LED, LOW);
-  //digitalWrite(PIN_ENABLE_SENSORS_3V3, LOW);
-  //digitalWrite(PIN_ENABLE_I2C_PULLUP, LOW);
+  //__WFI();  //Wait For Interrupt; timer and movement wakes SoC
 }
 
 void setup()
@@ -614,7 +638,7 @@ void loop()
   debugPrintln((uint8_t)(globalTime/1000000));
 
   DEBUG_STREAM.print("Waiting for IDLE_TIMER or Movement\n\n\n\n");
-  GoIntoSleepMode(); //put device in sleep mode to preserver power
+  //GoIntoSleepMode(); //put device in sleep mode to preserver power
   sem_getSendGPScoords.acquire(); //wait till requested to get and send GPS coords
                                   //this can take up to IDLE_TIMER (default 30 seconds)
   DEBUG_STREAM.println("semaphore acquired");
