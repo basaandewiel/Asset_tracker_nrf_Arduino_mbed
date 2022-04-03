@@ -1,4 +1,4 @@
-# Asset_tracker_nrf - Arduino asset tracker
+# Asset_tracker_nrf - Arduino/mbed asset tracker
 ## Functionality
 This is Arduino demo firmware for custom hardware consisting of NRF52840, NRF9160 and LIS2DE12 sensor.
 When movement is detected or the idle timer expires, it tries to get a GPS fix, and to
